@@ -59,6 +59,22 @@ export type RouteMode = 'free' | 'destination';
 export type ReturnType = 'none' | 'loop' | 'same';
 export type Duration = 30 | 60 | 90 | 120 | 150 | 180 | 240 | 300 | 360;
 
+export interface CommunityPost {
+  id?: string;
+  userId: string;
+  userDisplayName: string;
+  userPhotoUrl?: string;
+  route: Route;
+  photos: string[];
+  comment: string;
+  likes: number;
+  likedBy: string[];
+  departureArea: string;
+  tags: string[];
+  createdAt: string | object;
+  updatedAt?: string | object;
+}
+
 export interface GenerateRouteRequest {
   lat: number;
   lng: number;
