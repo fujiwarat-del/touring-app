@@ -176,8 +176,8 @@ export default async function handler(
     }
 
     if (!parsedData || !Array.isArray(parsedData.routes)) {
-      console.error('Failed to parse Claude response:', rawText.slice(0, 500));
-      throw new Error('Claude returned invalid JSON format');
+      console.error('Failed to parse Claude response:', rawText.slice(0, 1000));
+      throw new Error(`Claude returned invalid JSON format. Raw: ${rawText.slice(0, 300)}`);
     }
 
     // Validate and sanitize routes
