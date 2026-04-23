@@ -128,7 +128,7 @@ export default async function handler(
     // Call Claude API with claude-sonnet-4-6
     const message = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: `あなたはバイクツーリング専門のルート提案AIです。
 日本の道路・観光地・ツーリングスポットに精通しており、
 安全で楽しいルートを提案することが得意です。
