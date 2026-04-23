@@ -1,23 +1,47 @@
 {
   "version": 2,
-  "functions": {
-    "api/claude.ts": { "maxDuration": 30 },
-    "api/routes.ts": { "maxDuration": 15 },
-    "api/health.ts": { "maxDuration": 10 }
-  },
-  "rewrites": [
-    { "source": "/api/claude", "destination": "/api/claude" },
-    { "source": "/api/routes/popular", "destination": "/api/routes" },
-    { "source": "/api/health", "destination": "/api/health" }
-  ],
-  "headers": [
+  "builds": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
-      ]
+      "src": "api/**/*.ts",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["shared/**"]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/claude",
+      "methods": ["POST"],
+      "dest": "/api/claude.ts",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+      }
+    },
+    {
+      "src": "/api/routes/popular",
+      "methods": ["GET"],
+      "dest": "/api/routes.ts",
+      "headers": {
+        "Access-Control-Allow-Origin": "*"
+      }
+    },
+    {
+      "src": "/api/health",
+      "methods": ["GET"],
+      "dest": "/api/health.ts"
+    },
+    {
+      "src": "/api/(.*)",
+      "methods": ["OPTIONS"],
+      "dest": "/api/health.ts",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+      }
     }
   ]
 }
