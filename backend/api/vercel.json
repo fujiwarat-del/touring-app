@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/claude.ts": { "maxDuration": 30 },
+    "api/routes.ts": { "maxDuration": 15 },
+    "api/health.ts": { "maxDuration": 10 }
+  },
   "builds": [
     {
       "src": "api/**/*.ts",

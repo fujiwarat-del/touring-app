@@ -1,8 +1,7 @@
 import type { GenerateRouteRequest, Route } from '@touring/shared';
-import { parseClaudeResponse } from '@touring/shared';
 
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
+  process.env.EXPO_PUBLIC_API_URL ?? 'https://touring-planner-backend.vercel.app';
 
 export interface ClaudeApiResult {
   routes: Route[];
