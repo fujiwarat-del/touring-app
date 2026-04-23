@@ -1,0 +1,72 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ============================================================
+    // Helper functions
+    // ============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isValidImageSize() {
+      // Max 10MB per image
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // ============================================================
+    // Community photos
+    // match /community/{userId}/{filename}
+    // ============================================================
+
+    match /community/{userId}/{filename} {
+      // Authenticated users can read community photos
+      allow read: if isAuthenticated();
+
+      // Users can only upload to their own folder
+      allow create: if isOwner(userId)
+        && isImage()
+        && isValidImageSize();
+
+      // Users can overwrite their own photos
+      allow update: if isOwner(userId)
+        && isImage()
+        && isValidImageSize();
+
+      // Users can delete their own photos
+      allow delete: if isOwner(userId);
+    }
+
+    // ============================================================
+    // User avatars
+    // match /avatars/{userId}
+    // ============================================================
+
+    match /avatars/{userId} {
+      // Anyone can read avatars
+      allow read: if true;
+
+      // Users can only upload their own avatar
+      allow write: if isOwner(userId)
+        && isImage()
+        && request.resource.size <= 2 * 1024 * 1024; // Max 2MB for avatars
+    }
+
+    // ============================================================
+    // Block all other paths by default
+    // ============================================================
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

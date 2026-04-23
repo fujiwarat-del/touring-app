@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(npx --version)",
+      "Bash(yarn --version)",
+      "PowerShell(yarn --version)",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue; Get-Command npm -ErrorAction SilentlyContinue; [System.Environment]::GetEnvironmentVariable\\(\"PATH\", \"Machine\"\\) -split \";\" | Where-Object { $_ -match \"node|npm\" })",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" --version)",
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\npm.cmd\" --version)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + $env:PATH; Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\"; npm install -g yarn 2>&1 | Select-Object -Last 3; yarn --version 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\"; yarn --version 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\"; yarn install 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\"; yarn install 2>&1 | Select-Object -Last 20)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\packages\\\\shared\"; yarn type-check 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\backend\\\\api\"; yarn type-check 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\apps\\\\mobile\"; yarn type-check 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\apps\\\\web\"; yarn type-check 2>&1)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\"; yarn install 2>&1 | Select-Object -Last 5)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs\\\\;\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\); Set-Location \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\"; yarn workspace @touring/mobile start --clear 2>&1 | Select-Object -First 30)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\apps\\\\mobile\\\\assets\" -Force)",
+      "Bash(npx expo *)",
+      "Bash(dir \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\apps\\\\mobile\\\\node_modules\\\\@expo\\\\metro-runtime\" /b)",
+      "Bash(ipconfig)",
+      "Bash(yarn install *)"
+    ]
+  }
+}

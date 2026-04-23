@@ -1,0 +1,55 @@
+{
+  "name": "touring-app",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*",
+      "backend/api"
+    ],
+    "nohoist": [
+      "**/react-native",
+      "**/react-native/**",
+      "**/expo",
+      "**/expo/**",
+      "**/expo-*",
+      "**/expo-*/**",
+      "**/@expo/**",
+      "**/react-native-gesture-handler",
+      "**/react-native-gesture-handler/**",
+      "**/react-native-reanimated",
+      "**/react-native-reanimated/**",
+      "**/react-native-screens",
+      "**/react-native-screens/**",
+      "**/react-native-safe-area-context",
+      "**/react-native-safe-area-context/**",
+      "**/@react-navigation/**",
+      "**/firebase",
+      "**/firebase/**",
+      "**/@sentry/**",
+      "**/react-native-web",
+      "**/react-native-web/**",
+      "**/react-dom",
+      "**/react-dom/**",
+      "**/react-native-worklets",
+      "**/react-native-worklets/**"
+    ]
+  },
+  "scripts": {
+    "mobile": "yarn workspace @touring/mobile start",
+    "web": "yarn workspace @touring/web dev",
+    "api": "yarn workspace @touring/api dev",
+    "build:web": "yarn workspace @touring/web build",
+    "build:shared": "yarn workspace @touring/shared build",
+    "type-check": "yarn workspaces foreach run type-check",
+    "lint": "yarn workspaces foreach run lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "yarn": ">=1.22.0"
+  }
+}

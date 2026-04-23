@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================
+    // Helper functions
+    // ============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidRoute() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['name', 'distance', 'time', 'difficulty'])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() < 200;
+    }
+
+    function isValidCommunityPost() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['userId', 'route', 'comment', 'createdAt'])
+        && data.userId is string
+        && data.comment is string
+        && data.comment.size() < 1000
+        && data.userId == request.auth.uid;
+    }
+
+    // ============================================================
+    // Users collection
+    // ============================================================
+
+    match /users/{userId} {
+      // Users can read/write only their own document
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+
+      // Saved routes subcollection
+      match /savedRoutes/{routeId} {
+        // Users can read/write/delete their own saved routes
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidRoute();
+        allow update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // ============================================================
+    // Community posts collection
+    // ============================================================
+
+    match /communityPosts/{postId} {
+      // Anyone authenticated can read community posts
+      allow read: if isAuthenticated();
+
+      // Only the post owner can create posts
+      allow create: if isAuthenticated()
+        && isValidCommunityPost()
+        && request.resource.data.photos.size() <= 10;
+
+      // Post owner can update (edit comment, etc.)
+      // Any authenticated user can like (update likes and likedBy only)
+      allow update: if isAuthenticated() && (
+        // Owner updates
+        isOwner(resource.data.userId) ||
+        // Like toggle: only likes and likedBy fields change
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy'])
+          && request.resource.data.likes is int
+          && request.resource.data.likes >= 0)
+      );
+
+      // Only the post owner can delete their post
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ============================================================
+    // App config (read-only for authenticated users)
+    // ============================================================
+
+    match /appConfig/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Admin only via Firebase Admin SDK
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@touring/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint api --ext .ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@touring/shared": "*",
+    "cors": "^2.8.5",
+    "firebase-admin": "^12.2.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/node": "^20.14.2",
+    "@vercel/node": "^3.2.0",
+    "typescript": "^5.4.5"
+  }
+}
