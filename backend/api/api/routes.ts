@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import type { CommunityPost } from '../../../packages/shared/src/types/index';
+import type { CommunityPost } from '../shared/types';
 
 // ============================================================
 // Firebase Admin initialization

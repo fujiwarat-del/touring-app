@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
-import { buildPrompt } from '../../../packages/shared/src/utils/promptBuilder';
-import type { GenerateRouteRequest, Route } from '../../../packages/shared/src/types/index';
+import { buildPrompt } from '../shared/promptBuilder';
+import type { GenerateRouteRequest, Route } from '../shared/types';
 
 // ============================================================
 // Rate limiting (in-memory, resets on cold start)

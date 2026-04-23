@@ -43,11 +43,5 @@
         "Access-Control-Allow-Headers": "Content-Type, Authorization"
       }
     }
-  ],
-  "env": {
-    "ANTHROPIC_API_KEY": "@anthropic-api-key",
-    "FIREBASE_PROJECT_ID": "@firebase-project-id",
-    "FIREBASE_CLIENT_EMAIL": "@firebase-client-email",
-    "FIREBASE_PRIVATE_KEY": "@firebase-private-key"
-  }
+  ]
 }
