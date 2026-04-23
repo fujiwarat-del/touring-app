@@ -225,10 +225,12 @@ export default async function handler(
     }
 
     const message = err instanceof Error ? err.message : 'Unknown error';
+    const stack = err instanceof Error ? err.stack : undefined;
     res.status(500).json({
       error: 'ルート生成中にエラーが発生しました。しばらく後でお試しください。',
       code: 'GENERATION_ERROR',
-      details: process.env.NODE_ENV === 'development' ? message : undefined,
+      details: message,
+      stack: stack?.slice(0, 500),
     });
   }
 }
