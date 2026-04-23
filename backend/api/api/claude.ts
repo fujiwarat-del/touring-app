@@ -176,8 +176,8 @@ export default async function handler(
     }
 
     if (!parsedData || !Array.isArray(parsedData.routes)) {
-      console.error('Failed to parse Claude response:', rawText.slice(0, 1000));
-      throw new Error(`Claude returned invalid JSON format. Raw: ${rawText.slice(0, 300)}`);
+      console.error('Failed to parse Claude response:', rawText.slice(0, 500));
+      throw new Error('Claude returned invalid JSON format');
     }
 
     // Validate and sanitize routes
@@ -225,12 +225,10 @@ export default async function handler(
     }
 
     const message = err instanceof Error ? err.message : 'Unknown error';
-    const stack = err instanceof Error ? err.stack : undefined;
     res.status(500).json({
       error: 'ルート生成中にエラーが発生しました。しばらく後でお試しください。',
       code: 'GENERATION_ERROR',
-      details: message,
-      stack: stack?.slice(0, 500),
+      details: process.env.NODE_ENV === 'development' ? message : undefined,
     });
   }
 }
