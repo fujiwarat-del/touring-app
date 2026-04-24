@@ -25,6 +25,10 @@ export function buildPrompt(req: GenerateRouteRequest): string {
     ? `目的地指定モード: ${destination}へ向かう`
     : 'フリーモード: 出発地点から自由にルートを生成';
 
+  const roadStr = emptyRoadMode
+    ? '🌿 空いている道優先: 交通量の少ない道・下道を優先すること（高速は空いている場合のみ利用可）'
+    : '🕐 時間優先: 高速道路・有料道路を積極的に活用し、所要時間を短縮すること';
+
   const weatherStr = weatherInfo
     ? `現在の天気: ${weatherInfo.weatherDescription} ${weatherInfo.icon}, 気温: ${weatherInfo.temperature}°C, 風速: ${weatherInfo.windSpeed}km/h, 降水: ${weatherInfo.precipitation}mm`
     : '';
@@ -41,7 +45,7 @@ ${locationStr}
 - 所要時間: ${durationStr}
 - ルートモード: ${modeStr}
 - ${returnStr}
-- 高速道路・有料道路: 交通状況が「${todayInfo.trafficLabel}」の場合は積極的に活用すること
+- ${roadStr}
 
 ## 本日の状況
 - 日付: ${todayInfo.dateStr}

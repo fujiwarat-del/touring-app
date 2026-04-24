@@ -9,7 +9,6 @@ import {
   Alert,
   TextInput,
   SafeAreaView,
-  Switch,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -58,6 +57,7 @@ export default function HomeScreen() {
   const [routeMode, setRouteMode] = useState<RouteMode>('free');
   const [returnType, setReturnType] = useState<ReturnType>('loop');
   const [destination, setDestination] = useState('');
+  const [roadSearchMode, setRoadSearchMode] = useState<'normal' | 'empty'>('normal');
   const [generating, setGenerating] = useState(false);
 
   // Fetch weather when location changes
@@ -125,7 +125,7 @@ export default function HomeScreen() {
         routeMode,
         returnType,
         destination: destination.trim() || undefined,
-        emptyRoadMode: false,
+        emptyRoadMode: roadSearchMode === 'empty',
         todayInfo,
         weatherInfo: weather ?? undefined,
       });
@@ -148,6 +148,7 @@ export default function HomeScreen() {
     routeMode,
     returnType,
     destination,
+    roadSearchMode,
     todayInfo,
     weather,
     navigation,
@@ -422,6 +423,61 @@ export default function HomeScreen() {
           </View>
         </View>
 
+
+        {/* Road Search Mode */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🛣️ ルート検索タイプ</Text>
+          <View style={styles.modeToggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.modeToggleBtn,
+                roadSearchMode === 'normal' && styles.modeToggleBtnActive,
+              ]}
+              onPress={() => setRoadSearchMode('normal')}
+            >
+              <Text
+                style={[
+                  styles.modeToggleText,
+                  roadSearchMode === 'normal' && styles.modeToggleTextActive,
+                ]}
+              >
+                🕐 時間優先
+              </Text>
+              <Text
+                style={[
+                  styles.modeToggleSub,
+                  roadSearchMode === 'normal' && styles.modeToggleSubActive,
+                ]}
+              >
+                高速・有料道路を活用
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.modeToggleBtn,
+                roadSearchMode === 'empty' && styles.modeToggleBtnActive,
+              ]}
+              onPress={() => setRoadSearchMode('empty')}
+            >
+              <Text
+                style={[
+                  styles.modeToggleText,
+                  roadSearchMode === 'empty' && styles.modeToggleTextActive,
+                ]}
+              >
+                🌿 空いている道
+              </Text>
+              <Text
+                style={[
+                  styles.modeToggleSub,
+                  roadSearchMode === 'empty' && styles.modeToggleSubActive,
+                ]}
+              >
+                交通量の少ない道を優先
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Generate Buttons */}
         <View style={styles.generateSection}>
