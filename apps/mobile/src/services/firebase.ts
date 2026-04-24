@@ -54,10 +54,15 @@ if (isConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
-    storage = getStorage(app);
     auth = getAuth(app);
   } catch (e) {
     console.warn('[Firebase] 初期化に失敗しました。.env の設定を確認してください:', e);
+  }
+  // Storage は別途初期化（Spark プランでは使えないためエラーでも他機能に影響させない）
+  try {
+    storage = getStorage(app!);
+  } catch (e) {
+    console.warn('[Firebase] Storage の初期化に失敗しました（Spark プランでは利用不可）:', e);
   }
 }
 
