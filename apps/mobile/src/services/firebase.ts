@@ -26,12 +26,11 @@ import {
 import {
   getAuth,
   initializeAuth,
-  getReactNativePersistence,
+  inMemoryPersistence,
   signInAnonymously,
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Route, CommunityPost } from '@touring/shared';
 
 // Firebase config from environment variables
@@ -57,11 +56,8 @@ if (isConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
-    // React Native では AsyncStorage を使った永続化が必要
     try {
-      auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage),
-      });
+      auth = initializeAuth(app, { persistence: inMemoryPersistence });
     } catch {
       // 既に初期化済み（ホットリロード時）
       auth = getAuth(app);
