@@ -25,10 +25,6 @@ export function buildPrompt(req: GenerateRouteRequest): string {
     ? `目的地指定モード: ${destination}へ向かう`
     : 'フリーモード: 出発地点から自由にルートを生成';
 
-  const emptyRoadStr = emptyRoadMode
-    ? '【エンプティロードモード有効: 高速道路・有料道路を完全回避し、できる限り交通量の少ない道を優先すること】'
-    : '';
-
   const weatherStr = weatherInfo
     ? `現在の天気: ${weatherInfo.weatherDescription} ${weatherInfo.icon}, 気温: ${weatherInfo.temperature}°C, 風速: ${weatherInfo.windSpeed}km/h, 降水: ${weatherInfo.precipitation}mm`
     : '';
@@ -45,7 +41,7 @@ ${locationStr}
 - 所要時間: ${durationStr}
 - ルートモード: ${modeStr}
 - ${returnStr}
-${emptyRoadStr ? `\n${emptyRoadStr}` : ''}
+- 高速道路・有料道路: 交通状況が「${todayInfo.trafficLabel}」の場合は積極的に活用すること
 
 ## 本日の状況
 - 日付: ${todayInfo.dateStr}

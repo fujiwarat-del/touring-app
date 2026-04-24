@@ -58,7 +58,6 @@ export default function HomeScreen() {
   const [routeMode, setRouteMode] = useState<RouteMode>('free');
   const [returnType, setReturnType] = useState<ReturnType>('loop');
   const [destination, setDestination] = useState('');
-  const [emptyRoadMode, setEmptyRoadMode] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   // Fetch weather when location changes
@@ -126,7 +125,7 @@ export default function HomeScreen() {
         routeMode,
         returnType,
         destination: destination.trim() || undefined,
-        emptyRoadMode,
+        emptyRoadMode: false,
         todayInfo,
         weatherInfo: weather ?? undefined,
       });
@@ -149,7 +148,6 @@ export default function HomeScreen() {
     routeMode,
     returnType,
     destination,
-    emptyRoadMode,
     todayInfo,
     weather,
     navigation,
@@ -424,23 +422,6 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Empty Road Mode */}
-        <View style={styles.section}>
-          <View style={styles.switchRow}>
-            <View style={styles.switchInfo}>
-              <Text style={styles.switchTitle}>🛣️ エンプティロードモード</Text>
-              <Text style={styles.switchDesc}>
-                高速・有料道路を完全回避。交通量の少ない道を優先
-              </Text>
-            </View>
-            <Switch
-              value={emptyRoadMode}
-              onValueChange={setEmptyRoadMode}
-              trackColor={{ false: COLORS.border, true: COLORS.primary }}
-              thumbColor={COLORS.white}
-            />
-          </View>
-        </View>
 
         {/* Generate Buttons */}
         <View style={styles.generateSection}>
