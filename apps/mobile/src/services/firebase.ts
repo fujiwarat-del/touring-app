@@ -25,6 +25,8 @@ import {
 } from 'firebase/storage';
 import {
   getAuth,
+  initializeAuth,
+  inMemoryPersistence,
   signInAnonymously,
   onAuthStateChanged,
   User,
@@ -54,15 +56,21 @@ if (isConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     db = getFirestore(app);
-    auth = getAuth(app);
+    // React Native では initializeAuth + inMemoryPersistence が必要
+    try {
+      auth = initializeAuth(app, { persistence: inMemoryPersistence });
+    } catch {
+      // 既に初期化済み（ホットリロード時）
+      auth = getAuth(app);
+    }
   } catch (e) {
-    console.warn('[Firebase] 初期化に失敗しました。.env の設定を確認してください:', e);
+    console.error('[Firebase] 初期化に失敗しました:', e);
   }
   // Storage は別途初期化（Spark プランでは使えないためエラーでも他機能に影響させない）
   try {
     storage = getStorage(app!);
   } catch (e) {
-    console.warn('[Firebase] Storage の初期化に失敗しました（Spark プランでは利用不可）:', e);
+    console.warn('[Firebase] Storage 未使用（Cloudinary を使用）');
   }
 }
 
