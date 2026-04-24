@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 
+import type { Route } from '@touring/shared';
 import HomeScreen from './src/screens/HomeScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import PostScreen from './src/screens/PostScreen';
@@ -16,7 +17,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
   HomeTabs: undefined;
-  Results: { routes?: unknown[]; startLat?: number; startLng?: number };
+  Results: { routes?: Route[]; startLat?: number; startLng?: number };
   Post: undefined;
 };
 export type HomeTabParamList = {

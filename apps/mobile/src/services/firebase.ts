@@ -18,12 +18,6 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from 'firebase/storage';
-import {
   getAuth,
   initializeAuth,
   inMemoryPersistence,
@@ -49,7 +43,6 @@ const isConfigured = !!firebaseConfig.projectId && !!firebaseConfig.apiKey;
 // Initialize Firebase (singleton) — 設定が揃っている場合のみ初期化
 let app: ReturnType<typeof initializeApp> | null = null;
 let db: ReturnType<typeof getFirestore> | null = null;
-let storage: ReturnType<typeof getStorage> | null = null;
 let auth: ReturnType<typeof getAuth> | null = null;
 
 if (isConfigured) {
@@ -64,12 +57,6 @@ if (isConfigured) {
     }
   } catch (e) {
     console.error('[Firebase] 初期化に失敗しました:', e);
-  }
-  // Storage は別途初期化（Spark プランでは使えないためエラーでも他機能に影響させない）
-  try {
-    storage = getStorage(app!);
-  } catch (e) {
-    console.warn('[Firebase] Storage 未使用（Cloudinary を使用）');
   }
 }
 
@@ -251,21 +238,4 @@ export async function toggleLike(postId: string): Promise<void> {
 // Photo Upload
 // ============================================================
 
-/**
- * Upload a photo to Firebase Storage and return the download URL
- */
-export async function uploadPhoto(
-  localUri: string,
-  folder = 'community'
-): Promise<string> {
-  if (!storage) throw new Error('Firebase が未設定です。');
-  const user = await ensureAnonymousAuth();
-  const filename = `${folder}/${user.uid}/${Date.now()}.jpg`;
-  const storageRef = ref(storage, filename);
-
-  const response = await fetch(localUri);
-  const blob = await response.blob();
-  await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
-
-  return getDownloadURL(storageRef);
-}
+// 写真アップロードは Cloudinary を使用（cloudinaryService.ts を参照）
