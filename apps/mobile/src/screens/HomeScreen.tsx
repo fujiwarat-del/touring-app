@@ -10,6 +10,7 @@ import {
   TextInput,
   SafeAreaView,
 } from 'react-native';
+import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import {
@@ -55,10 +56,18 @@ export default function HomeScreen() {
   const [selectedPrefs, setSelectedPrefs] = useState<RidingPreference[]>([]);
   const [duration, setDuration] = useState(APP_CONFIG.defaultDuration);
   const [routeMode, setRouteMode] = useState<RouteMode>('free');
-  const [returnType, setReturnType] = useState<ReturnType>('loop');
+  const [returnType, setReturnType] = useState<ReturnType>('none');
   const [destination, setDestination] = useState('');
   const [roadSearchMode, setRoadSearchMode] = useState<'normal' | 'empty'>('normal');
   const [generating, setGenerating] = useState(false);
+
+  // Manual departure location
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [manualLocationText, setManualLocationText] = useState('');
+  const [manualLat, setManualLat] = useState<number | null>(null);
+  const [manualLng, setManualLng] = useState<number | null>(null);
+  const [manualLocationName, setManualLocationName] = useState<string | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
 
   // Fetch weather when location changes
   useEffect(() => {
@@ -77,6 +86,31 @@ export default function HomeScreen() {
     }
   }, [location.lat, location.lng]);
 
+  // Effective location (manual overrides GPS)
+  const effectiveLat = isManualMode ? manualLat : location.lat;
+  const effectiveLng = isManualMode ? manualLng : location.lng;
+  const effectiveLocationName = isManualMode ? manualLocationName : location.locationName;
+
+  const handleGeocode = useCallback(async () => {
+    if (!manualLocationText.trim()) return;
+    setGeocoding(true);
+    try {
+      const results = await Location.geocodeAsync(manualLocationText.trim());
+      if (results.length > 0) {
+        const { latitude, longitude } = results[0];
+        setManualLat(latitude);
+        setManualLng(longitude);
+        setManualLocationName(manualLocationText.trim());
+      } else {
+        Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください');
+      }
+    } catch {
+      Alert.alert('エラー', '場所の検索に失敗しました');
+    } finally {
+      setGeocoding(false);
+    }
+  }, [manualLocationText]);
+
   const togglePurpose = (p: TouringPurpose) => {
     setSelectedPurposes((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
@@ -90,15 +124,19 @@ export default function HomeScreen() {
   };
 
   const handleGenerate = useCallback(async () => {
-    if (!location.lat || !location.lng) {
-      Alert.alert(
-        '位置情報が必要です',
-        '現在地を取得してからルートを生成してください。',
-        [
-          { text: 'キャンセル', style: 'cancel' },
-          { text: '位置情報を取得', onPress: location.fetchLocation },
-        ]
-      );
+    if (!effectiveLat || !effectiveLng) {
+      if (isManualMode) {
+        Alert.alert('出発地点を検索してください', 'キーワードを入力して検索ボタンを押してください');
+      } else {
+        Alert.alert(
+          '位置情報が必要です',
+          '現在地を取得してからルートを生成してください。',
+          [
+            { text: 'キャンセル', style: 'cancel' },
+            { text: '位置情報を取得', onPress: location.fetchLocation },
+          ]
+        );
+      }
       return;
     }
 
@@ -115,9 +153,9 @@ export default function HomeScreen() {
     setGenerating(true);
     try {
       const result = await callClaude({
-        lat: location.lat,
-        lng: location.lng,
-        locationName: location.locationName ?? undefined,
+        lat: effectiveLat,
+        lng: effectiveLng,
+        locationName: effectiveLocationName ?? undefined,
         bikeType,
         purposes: selectedPurposes,
         preferences: selectedPrefs,
@@ -132,8 +170,8 @@ export default function HomeScreen() {
 
       navigation.navigate('Results', {
         routes: result.routes,
-        startLat: location.lat ?? undefined,
-        startLng: location.lng ?? undefined,
+        startLat: effectiveLat,
+        startLng: effectiveLng,
       });
     } catch (err: any) {
       Alert.alert(
@@ -144,7 +182,11 @@ export default function HomeScreen() {
       setGenerating(false);
     }
   }, [
-    location,
+    effectiveLat,
+    effectiveLng,
+    effectiveLocationName,
+    isManualMode,
+    location.fetchLocation,
     bikeType,
     selectedPurposes,
     selectedPrefs,
@@ -184,33 +226,85 @@ export default function HomeScreen() {
         {/* Location Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📍 出発地点</Text>
-          <View style={styles.locationBox}>
-            {location.loading ? (
-              <ActivityIndicator size="small" color={COLORS.primary} />
-            ) : location.lat ? (
-              <View style={styles.locationInfo}>
-                <Text style={styles.locationName}>
-                  {location.locationName ?? '現在地'}
-                </Text>
-                <Text style={styles.locationCoords}>
-                  {location.lat.toFixed(4)}, {location.lng?.toFixed(4)}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.locationPlaceholder}>
-                {location.error ?? '位置情報が未取得です'}
-              </Text>
-            )}
+          {/* Mode toggle */}
+          <View style={styles.locationModeRow}>
             <TouchableOpacity
-              style={styles.locationBtn}
-              onPress={location.fetchLocation}
-              disabled={location.loading}
+              style={[styles.locationModeBtn, !isManualMode && styles.locationModeBtnActive]}
+              onPress={() => setIsManualMode(false)}
             >
-              <Text style={styles.locationBtnText}>
-                {location.loading ? '取得中...' : '📡 現在地取得'}
+              <Text style={[styles.locationModeText, !isManualMode && styles.locationModeTextActive]}>
+                📡 現在地
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.locationModeBtn, isManualMode && styles.locationModeBtnActive]}
+              onPress={() => setIsManualMode(true)}
+            >
+              <Text style={[styles.locationModeText, isManualMode && styles.locationModeTextActive]}>
+                ✏️ 手動入力
               </Text>
             </TouchableOpacity>
           </View>
+
+          {isManualMode ? (
+            <View>
+              <View style={styles.manualInputRow}>
+                <TextInput
+                  style={styles.manualInput}
+                  placeholder="例: 箱根、静岡市、東京都新宿区"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={manualLocationText}
+                  onChangeText={setManualLocationText}
+                  onSubmitEditing={handleGeocode}
+                  returnKeyType="search"
+                />
+                <TouchableOpacity
+                  style={styles.geocodeBtn}
+                  onPress={handleGeocode}
+                  disabled={geocoding || !manualLocationText.trim()}
+                >
+                  {geocoding ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <Text style={styles.geocodeBtnText}>検索</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+              {manualLat && manualLng && (
+                <Text style={styles.manualResult}>
+                  ✅ {manualLocationName}（{manualLat.toFixed(4)}, {manualLng.toFixed(4)}）
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.locationBox}>
+              {location.loading ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : location.lat ? (
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationName}>
+                    {location.locationName ?? '現在地'}
+                  </Text>
+                  <Text style={styles.locationCoords}>
+                    {location.lat.toFixed(4)}, {location.lng?.toFixed(4)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.locationPlaceholder}>
+                  {location.error ?? '位置情報が未取得です'}
+                </Text>
+              )}
+              <TouchableOpacity
+                style={styles.locationBtn}
+                onPress={location.fetchLocation}
+                disabled={location.loading}
+              >
+                <Text style={styles.locationBtnText}>
+                  {location.loading ? '取得中...' : '📡 現在地取得'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Bike Type Section */}
@@ -367,8 +461,11 @@ export default function HomeScreen() {
         </View>
 
         {/* Duration */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⏱️ 走行時間</Text>
+        <View style={[styles.section, routeMode === 'destination' && styles.sectionDisabled]}
+              pointerEvents={routeMode === 'destination' ? 'none' : 'auto'}>
+          <Text style={[styles.sectionTitle, routeMode === 'destination' && styles.textDisabled]}>
+            ⏱️ 走行時間{routeMode === 'destination' ? '（目的地指定時は不使用）' : ''}
+          </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -402,7 +499,6 @@ export default function HomeScreen() {
           <View style={styles.returnRow}>
             {[
               { value: 'none' as ReturnType, label: '帰りなし', icon: '→' },
-              { value: 'loop' as ReturnType, label: 'ループ', icon: '🔄' },
               { value: 'same' as ReturnType, label: '折り返し', icon: '↩️' },
             ].map((rt) => (
               <TouchableOpacity
@@ -756,6 +852,72 @@ const styles = StyleSheet.create({
   },
   returnLabelSelected: {
     color: COLORS.primary,
+  },
+  sectionDisabled: {
+    opacity: 0.4,
+  },
+  textDisabled: {
+    color: COLORS.textMuted,
+  },
+  locationModeRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  locationModeBtn: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  locationModeBtnActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  locationModeText: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semiBold,
+    color: COLORS.textSecondary,
+  },
+  locationModeTextActive: {
+    color: COLORS.primary,
+  },
+  manualInputRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  manualInput: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: FONT_SIZE.md,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.background,
+  },
+  geocodeBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  geocodeBtnText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  manualResult: {
+    marginTop: SPACING.sm,
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.semiBold,
   },
   switchRow: {
     flexDirection: 'row',

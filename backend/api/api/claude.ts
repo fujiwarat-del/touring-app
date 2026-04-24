@@ -202,6 +202,14 @@ export default async function handler(
           if (wps.length > 0) {
             wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
           }
+          // For same-road return, force last waypoint to match start
+          if (routeRequest.returnType === 'same' && wps.length > 1) {
+            wps[wps.length - 1] = {
+              ...wps[0],
+              name: wps[0].name ?? '出発地点（帰着）',
+              type: 'destination' as const,
+            };
+          }
           return wps;
         })(),
         highlightWaypoints: Array.isArray(r.highlightWaypoints) ? r.highlightWaypoints : [],
