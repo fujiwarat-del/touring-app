@@ -130,7 +130,11 @@ export default function HomeScreen() {
         weatherInfo: weather ?? undefined,
       });
 
-      navigation.navigate('Results', { routes: result.routes });
+      navigation.navigate('Results', {
+        routes: result.routes,
+        startLat: location.lat ?? undefined,
+        startLng: location.lng ?? undefined,
+      });
     } catch (err: any) {
       Alert.alert(
         'ルート生成に失敗しました',

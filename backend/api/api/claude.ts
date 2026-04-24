@@ -196,7 +196,14 @@ export default async function handler(
         type: String(r.type ?? 'ツーリング'),
         description: String(r.description ?? ''),
         caution: String(r.caution ?? ''),
-        waypointObjects: Array.isArray(r.waypointObjects) ? r.waypointObjects : [],
+        waypointObjects: (() => {
+          const wps = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
+          // Override first waypoint coords with actual GPS to prevent drift
+          if (wps.length > 0) {
+            wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
+          }
+          return wps;
+        })(),
         highlightWaypoints: Array.isArray(r.highlightWaypoints) ? r.highlightWaypoints : [],
       }));
 

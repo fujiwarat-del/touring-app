@@ -15,7 +15,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
   HomeTabs: undefined;
-  Results: { routes?: unknown[] };
+  Results: { routes?: unknown[]; startLat?: number; startLng?: number };
 };
 export type HomeTabParamList = {
   Home: undefined;

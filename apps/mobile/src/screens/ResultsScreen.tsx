@@ -25,6 +25,8 @@ export default function ResultsScreen() {
   const navigation = useNavigation();
   const route = useRoute<ResultsRouteProp>();
   const routes = route.params?.routes ?? [];
+  const startLat = route.params?.startLat;
+  const startLng = route.params?.startLng;
 
   const [savedRouteIds, setSavedRouteIds] = useState<Set<number>>(new Set());
   const [savingIndex, setSavingIndex] = useState<number | null>(null);
@@ -133,6 +135,8 @@ export default function ResultsScreen() {
               onSave={(tourRoute) => handleSave(tourRoute, i)}
               onShare={handleShare}
               showActions
+              startLat={startLat}
+              startLng={startLng}
             />
           </View>
         ))}
