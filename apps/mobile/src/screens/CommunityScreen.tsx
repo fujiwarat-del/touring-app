@@ -16,15 +16,21 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import type { CommunityPost } from '@touring/shared';
 import { getRelativeTime } from '@touring/shared';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
-import { getCommunityRoutes, getPopularRoutes, toggleLike, uploadPhoto, postCommunityRoute } from '../services/firebase';
+import { getCommunityRoutes, getPopularRoutes, toggleLike } from '../services/firebase';
 import { RouteCard } from '../components/RouteCard';
 import { StarRating } from '../components/StarRating';
+
+type NavProp = StackNavigationProp<RootStackParamList>;
 
 type TabType = 'latest' | 'popular';
 
 export default function CommunityScreen() {
+  const navigation = useNavigation<NavProp>();
   const [activeTab, setActiveTab] = useState<TabType>('latest');
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,8 +97,18 @@ export default function CommunityScreen() {
     <SafeAreaView style={styles.safeArea}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>👥 コミュニティ</Text>
-        <Text style={styles.headerSubtitle}>仲間のツーリングルートを見つけよう</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerTitle}>👥 コミュニティ</Text>
+            <Text style={styles.headerSubtitle}>仲間のツーリングルートを見つけよう</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.postBtn}
+            onPress={() => navigation.navigate('Post')}
+          >
+            <Text style={styles.postBtnText}>＋ 投稿</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tab bar */}
@@ -265,6 +281,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.lg,
     paddingTop: SPACING.xl,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   headerTitle: {
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold,
@@ -274,6 +295,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 4,
+  },
+  postBtn: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
+  },
+  postBtnText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
   },
   tabBar: {
     flexDirection: 'row',

@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import HomeScreen from './src/screens/HomeScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
+import PostScreen from './src/screens/PostScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import SavedScreen from './src/screens/SavedScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -16,6 +17,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 export type RootStackParamList = {
   HomeTabs: undefined;
   Results: { routes?: unknown[]; startLat?: number; startLng?: number };
+  Post: undefined;
 };
 export type HomeTabParamList = {
   Home: undefined;
@@ -127,6 +129,17 @@ export default function App() {
               options={{
                 headerShown: true,
                 title: 'ルート提案',
+                headerStyle: { backgroundColor: '#1D9E75' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { fontWeight: 'bold' },
+              }}
+            />
+            <Stack.Screen
+              name="Post"
+              component={PostScreen}
+              options={{
+                headerShown: true,
+                title: 'ルートを投稿',
                 headerStyle: { backgroundColor: '#1D9E75' },
                 headerTintColor: '#fff',
                 headerTitleStyle: { fontWeight: 'bold' },
