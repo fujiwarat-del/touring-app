@@ -29,22 +29,25 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
   const destination = waypoints[waypoints.length - 1];
   const destStr = `${destination.lat},${destination.lng}`;
 
-  const middle = startLat && startLng ? waypoints : waypoints.slice(0, -1);
-  const waypointStr = middle
+  // Intermediate waypoints: skip first (= origin) and last (= destination)
+  const intermediates = (startLat && startLng ? waypoints.slice(1, -1) : waypoints.slice(0, -1))
     .slice(0, 8) // Google Maps allows max 8 waypoints in URL
     .map((wp) => `${wp.lat},${wp.lng}`)
     .join('|');
 
+  // Build URL manually to avoid URLSearchParams encoding '|' as '%7C'
   const base = 'https://www.google.com/maps/dir/';
-  const params = new URLSearchParams({
-    api: '1',
-    origin,
-    destination: destStr,
-    waypoints: waypointStr,
-    travelmode: 'driving',
-  });
+  const parts = [
+    'api=1',
+    `origin=${encodeURIComponent(origin)}`,
+    `destination=${encodeURIComponent(destStr)}`,
+    `travelmode=driving`,
+  ];
+  if (intermediates) {
+    parts.push(`waypoints=${intermediates}`); // keep '|' unencoded
+  }
 
-  return `${base}?${params.toString()}`;
+  return `${base}?${parts.join('&')}`;
 }
 
 /**
