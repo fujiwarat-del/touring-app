@@ -1,24 +1,52 @@
-import React, { Component } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { Component, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { savePushToken } from './src/services/firebase';
+
+// プッシュ通知の表示設定
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// ─── グローバルエラーハンドラ（デバッグ用）─────────────────
+if (__DEV__) {
+  const g = global as any;
+  const handler = g.ErrorUtils?.getGlobalHandler?.();
+  g.ErrorUtils?.setGlobalHandler?.((error: Error, isFatal: boolean) => {
+    console.error('[GlobalError] fatal=' + isFatal, error?.message, error?.stack);
+    handler?.(error, isFatal);
+  });
+}
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 
-import type { Route } from '@touring/shared';
+import type { Route, WaypointObject } from '@touring/shared';
 import HomeScreen from './src/screens/HomeScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import PostScreen from './src/screens/PostScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import SavedScreen from './src/screens/SavedScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import RouteMapScreen from './src/screens/RouteMapScreen';
+import UserProfileScreen from './src/screens/UserProfileScreen';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
   HomeTabs: undefined;
   Results: { routes?: Route[]; startLat?: number; startLng?: number };
   Post: undefined;
+  RouteMap: {
+    routeData: { name: string; waypointObjects: WaypointObject[] };
+    mapUrl?: string;
+  };
+  UserProfile: { userId: string; displayName: string };
 };
 export type HomeTabParamList = {
   Home: undefined;
@@ -76,15 +104,16 @@ function HomeTabs() {
 }
 
 // ─── エラーバウンダリ ──────────────────────────────────────
-interface ErrorBoundaryState { hasError: boolean; error: string }
+interface ErrorBoundaryState { hasError: boolean; error: string; stack: string }
 
 class AppErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBoundaryState> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: '' };
+    this.state = { hasError: false, error: '', stack: '' };
   }
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error: error.message };
+    console.error('[AppErrorBoundary]', error.message, error.stack);
+    return { hasError: true, error: error.message, stack: error.stack ?? '' };
   }
   render() {
     if (this.state.hasError) {
@@ -93,9 +122,10 @@ class AppErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBou
           <Text style={errStyles.icon}>⚠️</Text>
           <Text style={errStyles.title}>エラーが発生しました</Text>
           <Text style={errStyles.message}>{this.state.error}</Text>
+          <Text style={errStyles.stack} selectable>{this.state.stack}</Text>
           <TouchableOpacity
             style={errStyles.btn}
-            onPress={() => this.setState({ hasError: false, error: '' })}
+            onPress={() => this.setState({ hasError: false, error: '', stack: '' })}
           >
             <Text style={errStyles.btnText}>再試行</Text>
           </TouchableOpacity>
@@ -110,13 +140,46 @@ const errStyles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: '#fff' },
   icon:      { fontSize: 48, marginBottom: 16 },
   title:     { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 8 },
-  message:   { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 24 },
+  message:   { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 12 },
+  stack:     { fontSize: 10, color: '#999', marginBottom: 24, maxWidth: '100%' },
   btn:       { backgroundColor: '#1D9E75', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 8 },
   btnText:   { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
 
+// ─── プッシュ通知初期化 ───────────────────────────────────
+async function registerForPushNotifications() {
+  try {
+    // Expo Go / 実機のみ対応（シミュレーターは除外）
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    await savePushToken(tokenData.data);
+
+    // Android はチャンネル設定が必要
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    }
+  } catch {
+    // 通知権限がなくてもアプリは動作する
+  }
+}
+
 // ─── メインアプリ ─────────────────────────────────────────
 export default function App() {
+  useEffect(() => {
+    registerForPushNotifications();
+  }, []);
+
   return (
     <AppErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -145,6 +208,28 @@ export default function App() {
                 headerTintColor: '#fff',
                 headerTitleStyle: { fontWeight: 'bold' },
               }}
+            />
+            <Stack.Screen
+              name="RouteMap"
+              component={RouteMapScreen}
+              options={{
+                headerShown: true,
+                title: 'ルートマップ',
+                headerStyle: { backgroundColor: '#1D9E75' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { fontWeight: 'bold' },
+              }}
+            />
+            <Stack.Screen
+              name="UserProfile"
+              component={UserProfileScreen}
+              options={({ route }) => ({
+                headerShown: true,
+                title: (route.params as any).displayName ?? 'プロフィール',
+                headerStyle: { backgroundColor: '#1D9E75' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { fontWeight: 'bold' },
+              })}
             />
           </Stack.Navigator>
         </NavigationContainer>

@@ -19,6 +19,7 @@ import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
 import { uploadPhotos } from '../services/cloudinaryService';
 import { postCommunityRoute } from '../services/firebase';
+import { PREFECTURES_BY_AREA } from '@touring/shared';
 
 const MAX_PHOTOS = 5;
 
@@ -37,6 +38,7 @@ export default function PostScreen() {
   const [mapUrl, setMapUrl] = useState('');
   const [comment, setComment] = useState('');
   const [departureArea, setDepartureArea] = useState('');
+  const [selectedPrefectures, setSelectedPrefectures] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -88,6 +90,18 @@ export default function PostScreen() {
     );
   };
 
+  const togglePrefecture = (pref: string) => {
+    setSelectedPrefectures((prev) =>
+      prev.includes(pref) ? prev.filter((p) => p !== pref) : [...prev, pref]
+    );
+  };
+
+  const handleAreaSelect = (area: string) => {
+    setDepartureArea(area);
+    // エリアが変わったら都道府県選択をリセット
+    setSelectedPrefectures([]);
+  };
+
   const handlePost = useCallback(async () => {
     if (!routeName.trim()) {
       Alert.alert('ルート名を入力してください');
@@ -136,7 +150,8 @@ export default function PostScreen() {
         comment.trim(),
         uploadedUrls,
         selectedTags,
-        departureArea
+        departureArea,
+        selectedPrefectures,
       );
 
       Alert.alert('投稿完了！', 'ルートをコミュニティに共有しました 🏍️', [
@@ -148,7 +163,7 @@ export default function PostScreen() {
       setPosting(false);
       setUploading(false);
     }
-  }, [routeName, mapUrl, comment, departureArea, selectedTags, photos, navigation]);
+  }, [routeName, mapUrl, comment, departureArea, selectedPrefectures, selectedTags, photos, navigation]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -215,7 +230,7 @@ export default function PostScreen() {
                 <TouchableOpacity
                   key={area}
                   style={[styles.chip, departureArea === area && styles.chipSelected]}
-                  onPress={() => setDepartureArea(area)}
+                  onPress={() => handleAreaSelect(area)}
                 >
                   <Text style={[styles.chipText, departureArea === area && styles.chipTextSelected]}>
                     {area}
@@ -223,6 +238,33 @@ export default function PostScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            {/* 都道府県（エリア選択後に展開） */}
+            {departureArea && PREFECTURES_BY_AREA[departureArea] && (
+              <View style={styles.prefectureSection}>
+                <View style={styles.prefectureLabelRow}>
+                  <Text style={styles.prefectureLabel}>🗾 通過する都道府県（複数選択可・任意）</Text>
+                </View>
+                <View style={styles.chipRow}>
+                  {PREFECTURES_BY_AREA[departureArea].map((pref) => (
+                    <TouchableOpacity
+                      key={pref}
+                      style={[styles.chip, styles.prefChip, selectedPrefectures.includes(pref) && styles.prefChipSelected]}
+                      onPress={() => togglePrefecture(pref)}
+                    >
+                      <Text style={[styles.chipText, selectedPrefectures.includes(pref) && styles.prefChipTextSelected]}>
+                        {pref}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {selectedPrefectures.length > 0 && (
+                  <Text style={styles.prefectureHint}>
+                    ✅ {selectedPrefectures.join('・')} を選択中
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Tags */}
@@ -370,6 +412,37 @@ const styles = StyleSheet.create({
   },
   chipTextSelected: {
     color: COLORS.primary,
+  },
+  prefectureSection: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  prefectureLabelRow: {
+    marginBottom: SPACING.sm,
+  },
+  prefectureLabel: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semiBold,
+    color: COLORS.textSecondary,
+  },
+  prefChip: {
+    borderColor: '#1A7A4A30',
+    backgroundColor: '#F0FBF5',
+  },
+  prefChipSelected: {
+    borderColor: '#1A7A4A',
+    backgroundColor: '#D4F0E4',
+  },
+  prefChipTextSelected: {
+    color: '#1A7A4A',
+  },
+  prefectureHint: {
+    marginTop: SPACING.sm,
+    fontSize: FONT_SIZE.xs,
+    color: '#1A7A4A',
+    fontWeight: FONT_WEIGHT.semiBold,
   },
   photoRow: {
     flexDirection: 'row',

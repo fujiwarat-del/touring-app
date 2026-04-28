@@ -12,17 +12,20 @@ import {
 } from 'react-native';
 import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import type { Route } from '@touring/shared';
 import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
 import { RouteCard } from '../components/RouteCard';
+import { WeatherWidget } from '../components/WeatherWidget';
 import { saveRoute } from '../services/firebase';
 
 type ResultsRouteProp = RouteProp<RootStackParamList, 'Results'>;
+type NavProp = StackNavigationProp<RootStackParamList>;
 
 export default function ResultsScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProp>();
   const route = useRoute<ResultsRouteProp>();
   const routes = route.params?.routes ?? [];
   const startLat = route.params?.startLat;
@@ -113,6 +116,7 @@ export default function ResultsScreen() {
         <Text style={styles.resultsSubtitle}>
           あなたの条件に合わせたAI厳選ルートです
         </Text>
+        <WeatherWidget lat={startLat} lng={startLng} />
       </View>
 
       <ScrollView
@@ -134,6 +138,12 @@ export default function ResultsScreen() {
               isSaved={savedRouteIds.has(i)}
               onSave={(tourRoute) => handleSave(tourRoute, i)}
               onShare={handleShare}
+              onShowMap={(tourRoute) =>
+                navigation.navigate('RouteMap', {
+                  routeData: { name: tourRoute.name, waypointObjects: tourRoute.waypointObjects },
+                  mapUrl: tourRoute.mapUrl,
+                })
+              }
               showActions
               startLat={startLat}
               startLng={startLng}

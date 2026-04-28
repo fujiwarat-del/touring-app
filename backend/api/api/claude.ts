@@ -48,7 +48,7 @@ function validateRequest(body: unknown): body is GenerateRouteRequest {
   if (!Array.isArray(req.preferences)) return false;
   if (typeof req.duration !== 'number' || req.duration < 15 || req.duration > 720) return false;
   if (!['free', 'destination'].includes(req.routeMode as string)) return false;
-  if (!['none', 'loop', 'same'].includes(req.returnType as string)) return false;
+  if (!['none', 'loop', 'same', 'different'].includes(req.returnType as string)) return false;
   if (typeof req.emptyRoadMode !== 'boolean') return false;
   if (!req.todayInfo || typeof req.todayInfo !== 'object') return false;
 

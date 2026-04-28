@@ -12,12 +12,14 @@ import { makeMapUrl } from '@touring/shared';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, SHADOW } from '../theme/spacing';
 import { StarRow } from './StarRating';
+import { DestWeatherBadge } from './DestWeatherBadge';
 
 interface RouteCardProps {
   route: Route;
   index?: number;
   onSave?: (route: Route) => void;
   onShare?: (route: Route) => void;
+  onShowMap?: (route: Route) => void;
   isSaved?: boolean;
   startLat?: number;
   startLng?: number;
@@ -41,6 +43,7 @@ export function RouteCard({
   index,
   onSave,
   onShare,
+  onShowMap,
   isSaved = false,
   startLat,
   startLng,
@@ -158,6 +161,19 @@ export function RouteCard({
         </View>
       )}
 
+      {/* Destination Weather */}
+      {(() => {
+        const dest = route.waypointObjects?.[route.waypointObjects.length - 1];
+        if (!dest?.lat || !dest?.lng) return null;
+        return (
+          <DestWeatherBadge
+            lat={dest.lat}
+            lng={dest.lng}
+            locationName={dest.name}
+          />
+        );
+      })()}
+
       {/* Caution */}
       {route.caution && (
         <View style={styles.cautionBox}>
@@ -169,6 +185,14 @@ export function RouteCard({
       {/* Action buttons */}
       {showActions && (
         <View style={styles.actionsRow}>
+          {onShowMap && (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.inAppMapBtn]}
+              onPress={() => onShowMap(route)}
+            >
+              <Text style={styles.inAppMapBtnText}>📍 地図</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.actionBtn, styles.mapBtn]}
             onPress={handleOpenMap}
@@ -367,6 +391,17 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  inAppMapBtn: {
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    flex: 1,
+  },
+  inAppMapBtnText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZE.sm,
+    fontWeight: '700',
   },
   mapBtn: {
     backgroundColor: COLORS.primary,

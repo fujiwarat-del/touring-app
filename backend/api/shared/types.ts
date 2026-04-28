@@ -52,11 +52,11 @@ export interface WeatherInfo {
   ridingAdvice: string;
 }
 
-export type BikeType = '大型' | '中型' | 'オフロード' | 'スクーター';
-export type TouringPurpose = 'ワインディング' | '温泉' | '海沿い' | 'グルメ' | '道の駅' | '絶景';
+export type BikeType = '大型' | '中型' | 'オフロード' | '小型125cc以下';
+export type TouringPurpose = 'ワインディング' | '温泉' | '海沿い' | 'グルメ' | '道の駅' | '絶景' | '林道';
 export type RidingPreference = '信号少な目' | '高速使わない' | '峠道' | '下道' | '川沿い';
 export type RouteMode = 'free' | 'destination';
-export type ReturnType = 'none' | 'loop' | 'same';
+export type ReturnType = 'none' | 'loop' | 'same' | 'different';
 export type Duration = 30 | 60 | 90 | 120 | 150 | 180 | 240 | 300 | 360;
 
 export interface CommunityPost {

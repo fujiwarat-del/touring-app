@@ -34,6 +34,16 @@
       "dest": "/api/health.ts"
     },
     {
+      "src": "/api/notify",
+      "methods": ["POST"],
+      "dest": "/api/notify.ts",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    },
+    {
       "src": "/api/(.*)",
       "methods": ["OPTIONS"],
       "dest": "/api/health.ts",

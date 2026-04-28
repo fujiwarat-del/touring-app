@@ -50,6 +50,21 @@ export const HOLIDAYS: Record<string, string> = {
 };
 
 // ============================================================
+// Prefectures by Area
+// ============================================================
+
+export const PREFECTURES_BY_AREA: Record<string, string[]> = {
+  '北海道': ['北海道'],
+  '東北': ['青森', '岩手', '宮城', '秋田', '山形', '福島'],
+  '関東': ['東京', '神奈川', '埼玉', '千葉', '茨城', '栃木', '群馬'],
+  '中部': ['新潟', '富山', '石川', '福井', '山梨', '長野', '岐阜', '静岡', '愛知'],
+  '近畿': ['三重', '滋賀', '京都', '大阪', '兵庫', '奈良', '和歌山'],
+  '中国': ['鳥取', '島根', '岡山', '広島', '山口'],
+  '四国': ['徳島', '香川', '愛媛', '高知'],
+  '九州・沖縄': ['福岡', '佐賀', '長崎', '熊本', '大分', '宮崎', '鹿児島', '沖縄'],
+};
+
+// ============================================================
 // Seasons
 // ============================================================
 
@@ -89,7 +104,7 @@ export const BIKE_TYPES: Array<{ value: BikeType; label: string; icon: string; d
   { value: '大型', label: '大型', icon: '🏍️', description: '400cc以上' },
   { value: '中型', label: '中型', icon: '🛵', description: '250-400cc' },
   { value: 'オフロード', label: 'オフロード', icon: '🏔️', description: '林道OK' },
-  { value: 'スクーター', label: 'スクーター', icon: '🛺', description: 'AT限定' },
+  { value: '小型125cc以下', label: '小型125cc以下', icon: '🛵', description: '高速道路不可' },
 ];
 
 // ============================================================
@@ -100,9 +115,14 @@ export const PURPOSES: Array<{ value: TouringPurpose; label: string; icon: strin
   { value: 'ワインディング', label: 'ワインディング', icon: '〜' },
   { value: '温泉', label: '温泉', icon: '♨️' },
   { value: '海沿い', label: '海沿い', icon: '🌊' },
+  { value: '川沿い', label: '川沿い', icon: '🏞️' },
   { value: 'グルメ', label: 'グルメ', icon: '🍜' },
   { value: '道の駅', label: '道の駅', icon: '🏪' },
   { value: '絶景', label: '絶景', icon: '🗻' },
+  { value: '林道', label: '林道', icon: '🌲' },
+  { value: 'キャンプ', label: 'キャンプ', icon: '🏕️' },
+  { value: '湖・高原', label: '湖・高原', icon: '🏔️' },
+  { value: '城・史跡', label: '城・史跡', icon: '🏯' },
 ];
 
 // ============================================================
@@ -113,8 +133,6 @@ export const PREFS: Array<{ value: RidingPreference; label: string; icon: string
   { value: '信号少な目', label: '信号少な目', icon: '🚦' },
   { value: '高速使わない', label: '高速使わない', icon: '🛣️' },
   { value: '峠道', label: '峠道', icon: '⛰️' },
-  { value: '下道', label: '下道', icon: '🛤️' },
-  { value: '川沿い', label: '川沿い', icon: '🏞️' },
 ];
 
 // ============================================================
@@ -145,11 +163,11 @@ export interface TrafficConfig {
 }
 
 export const TRAFFIC_LEVELS: TrafficConfig[] = [
-  { level: 1, label: '空いてます', color: '#1D9E75', bgColor: '#E8F8F3' },
-  { level: 2, label: 'やや空き', color: '#5BB450', bgColor: '#EDF7EC' },
-  { level: 3, label: '普通', color: '#F0A500', bgColor: '#FEF7E6' },
-  { level: 4, label: 'やや混雑', color: '#E07800', bgColor: '#FEF0E0' },
-  { level: 5, label: '混雑予想', color: '#D63B3B', bgColor: '#FDECEC' },
+  { level: 1, label: '空いています', color: '#1D9E75', bgColor: '#E8F8F3' },
+  { level: 2, label: 'やや空いています', color: '#5BB450', bgColor: '#EDF7EC' },
+  { level: 3, label: '普通です', color: '#F0A500', bgColor: '#FEF7E6' },
+  { level: 4, label: 'やや混雑しています', color: '#E07800', bgColor: '#FEF0E0' },
+  { level: 5, label: '混雑が予想されます', color: '#D63B3B', bgColor: '#FDECEC' },
 ];
 
 // ============================================================

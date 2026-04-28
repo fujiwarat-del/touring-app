@@ -460,71 +460,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Duration */}
-        <View style={[styles.section, routeMode === 'destination' && styles.sectionDisabled]}
-              pointerEvents={routeMode === 'destination' ? 'none' : 'auto'}>
-          <Text style={[styles.sectionTitle, routeMode === 'destination' && styles.textDisabled]}>
-            ⏱️ 走行時間{routeMode === 'destination' ? '（目的地指定時は不使用）' : ''}
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.durationScroll}
-          >
-            {DURATION_OPTIONS.map((d) => (
-              <TouchableOpacity
-                key={d.value}
-                style={[
-                  styles.durationChip,
-                  duration === d.value && styles.durationChipSelected,
-                ]}
-                onPress={() => setDuration(d.value)}
-              >
-                <Text
-                  style={[
-                    styles.durationText,
-                    duration === d.value && styles.durationTextSelected,
-                  ]}
-                >
-                  {d.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Return Type */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔄 帰り方</Text>
-          <View style={styles.returnRow}>
-            {[
-              { value: 'none' as ReturnType, label: '帰りなし', icon: '→' },
-              { value: 'same' as ReturnType, label: '折り返し', icon: '↩️' },
-            ].map((rt) => (
-              <TouchableOpacity
-                key={rt.value}
-                style={[
-                  styles.returnChip,
-                  returnType === rt.value && styles.returnChipSelected,
-                ]}
-                onPress={() => setReturnType(rt.value)}
-              >
-                <Text style={styles.returnIcon}>{rt.icon}</Text>
-                <Text
-                  style={[
-                    styles.returnLabel,
-                    returnType === rt.value && styles.returnLabelSelected,
-                  ]}
-                >
-                  {rt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-
-        {/* Road Search Mode */}
+        {/* Road Search Mode ← 走行時間の前に移動 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🛣️ ルート検索タイプ</Text>
           <View style={styles.modeToggleRow}>
@@ -576,6 +512,87 @@ export default function HomeScreen() {
                 交通量の少ない道を優先
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Duration + 目安距離 */}
+        <View style={[styles.section, routeMode === 'destination' && styles.sectionDisabled]}
+              pointerEvents={routeMode === 'destination' ? 'none' : 'auto'}>
+          <Text style={[styles.sectionTitle, routeMode === 'destination' && styles.textDisabled]}>
+            ⏱️ 走行時間{routeMode === 'destination' ? '（目的地指定時は不使用）' : ''}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.durationScroll}
+          >
+            {DURATION_OPTIONS.map((d) => (
+              <TouchableOpacity
+                key={d.value}
+                style={[
+                  styles.durationChip,
+                  duration === d.value && styles.durationChipSelected,
+                ]}
+                onPress={() => setDuration(d.value)}
+              >
+                <Text
+                  style={[
+                    styles.durationText,
+                    duration === d.value && styles.durationTextSelected,
+                  ]}
+                >
+                  {d.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {/* 目安距離（ルート検索タイプに連動） */}
+          {routeMode !== 'destination' && (() => {
+            const hours = duration / 60;
+            const avgSpeed = roadSearchMode === 'empty' ? 28 : 55;
+            const maxDist = Math.round(hours * avgSpeed);
+            const minDist = Math.round(maxDist * 0.8);
+            return (
+              <View style={styles.distanceGuide}>
+                <Text style={styles.distanceGuideText}>
+                  📏 走行距離の目安：約{minDist}〜{maxDist}km
+                </Text>
+                <Text style={styles.distanceGuideSub}>
+                  {roadSearchMode === 'empty' ? '山道・ワインディング中心のため短め' : '高速活用により長距離走行可能'}
+                </Text>
+              </View>
+            );
+          })()}
+        </View>
+
+        {/* Return Type */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🔄 帰り方</Text>
+          <View style={styles.returnRow}>
+            {[
+              { value: 'none' as ReturnType, label: '帰りなし', icon: '→' },
+              { value: 'same' as ReturnType, label: '折り返し', icon: '↩️' },
+              { value: 'different' as ReturnType, label: '違うルート', icon: '🔀' },
+            ].map((rt) => (
+              <TouchableOpacity
+                key={rt.value}
+                style={[
+                  styles.returnChip,
+                  returnType === rt.value && styles.returnChipSelected,
+                ]}
+                onPress={() => setReturnType(rt.value)}
+              >
+                <Text style={styles.returnIcon}>{rt.icon}</Text>
+                <Text
+                  style={[
+                    styles.returnLabel,
+                    returnType === rt.value && styles.returnLabelSelected,
+                  ]}
+                >
+                  {rt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
@@ -937,6 +954,25 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs,
     color: COLORS.textSecondary,
     marginTop: 4,
+  },
+  distanceGuide: {
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  distanceGuideText: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
+    color: COLORS.primary,
+  },
+  distanceGuideSub: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.primaryDark,
+    marginTop: 2,
   },
   generateSection: {
     marginHorizontal: SPACING.lg,

@@ -25,7 +25,19 @@
       "Bash(npx expo *)",
       "Bash(dir \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\apps\\\\mobile\\\\node_modules\\\\@expo\\\\metro-runtime\" /b)",
       "Bash(ipconfig)",
-      "Bash(yarn install *)"
+      "Bash(yarn install *)",
+      "Bash(curl -s https://touring-planner-backend.vercel.app/api/health)",
+      "Bash(vercel --prod)",
+      "Bash(curl -s -X POST https://touring-planner-backend.vercel.app/api/claude -H \"Content-Type: application/json\" -d \"{\\\\\"lat\\\\\":35.6812,\\\\\"lng\\\\\":139.7671,\\\\\"bikeType\\\\\":\\\\\"大型\\\\\",\\\\\"purposes\\\\\":[\\\\\"ワインディング\\\\\"],\\\\\"preferences\\\\\":[],\\\\\"duration\\\\\":120,\\\\\"routeMode\\\\\":\\\\\"free\\\\\",\\\\\"returnType\\\\\":\\\\\"loop\\\\\",\\\\\"emptyRoadMode\\\\\":false,\\\\\"todayInfo\\\\\":{\\\\\"dateStr\\\\\":\\\\\"2026年4月23日\\(木\\)\\\\\",\\\\\"isHoliday\\\\\":false,\\\\\"season\\\\\":\\\\\"春\\\\\",\\\\\"trafficLevel\\\\\":2,\\\\\"trafficLabel\\\\\":\\\\\"普通\\\\\",\\\\\"trafficColor\\\\\":\\\\\"#22c55e\\\\\",\\\\\"dow\\\\\":\\\\\"木\\\\\",\\\\\"isWeekend\\\\\":false}}\")",
+      "Bash(vercel logs *)",
+      "Bash(Start-Sleep -Seconds 30)",
+      "Bash(curl -s -X POST \"https://touring-planner-backend.vercel.app/api/claude\" -H \"Content-Type: application/json\" -d \"{\\\\\"lat\\\\\":35.6762,\\\\\"lng\\\\\":139.6503,\\\\\"bikeType\\\\\":\\\\\"大型\\\\\",\\\\\"purposes\\\\\":[\\\\\"ワインディング\\\\\"],\\\\\"preferences\\\\\":[],\\\\\"duration\\\\\":120,\\\\\"routeMode\\\\\":\\\\\"free\\\\\",\\\\\"returnType\\\\\":\\\\\"loop\\\\\",\\\\\"emptyRoadMode\\\\\":false,\\\\\"todayInfo\\\\\":{\\\\\"dateStr\\\\\":\\\\\"2026-04-23\\\\\",\\\\\"isHoliday\\\\\":false,\\\\\"season\\\\\":\\\\\"春\\\\\",\\\\\"trafficLevel\\\\\":2,\\\\\"trafficLabel\\\\\":\\\\\"普通\\\\\",\\\\\"trafficColor\\\\\":\\\\\"yellow\\\\\",\\\\\"dow\\\\\":\\\\\"木\\\\\",\\\\\"isWeekend\\\\\":false}}\")",
+      "Bash(vercel deploy *)",
+      "Bash(curl -s -X POST \"https://touring-planner-backend.vercel.app/api/claude\" -H \"Content-Type: application/json\" -d '{\"lat\":35.6762,\"lng\":139.6503,\"bikeType\":\"大型\",\"purposes\":[\"ワインディング\"],\"preferences\":[],\"duration\":120,\"routeMode\":\"free\",\"returnType\":\"loop\",\"emptyRoadMode\":false,\"todayInfo\":{\"dateStr\":\"2026-04-23\",\"isHoliday\":false,\"season\":\"春\",\"trafficLevel\":2,\"trafficLabel\":\"普通\",\"trafficColor\":\"yellow\",\"dow\":\"木\",\"isWeekend\":false}}')",
+      "Bash(curl -s \"https://touring-planner-backend.vercel.app/api/health\")",
+      "Bash(npx tsc *)",
+      "PowerShell(cd \"C:\\\\Users\\\\fujiwara.t\\\\Desktop\\\\touring-app\\\\apps\\\\mobile\"; ls node_modules | Where-Object { $_.Name -match \"expo-crypto|get-random\" })",
+      "Bash(npm run *)"
     ]
   }
 }

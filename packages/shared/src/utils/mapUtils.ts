@@ -35,16 +35,22 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     .map((wp) => `${wp.lat},${wp.lng}`)
     .join('|');
 
-  // Build URL manually to avoid URLSearchParams encoding '|' as '%7C'
+  // Google Maps Dir API URL（travelmode=driving で車モード固定）
   const base = 'https://www.google.com/maps/dir/';
+  const encodedWaypoints = (startLat && startLng ? waypoints.slice(1, -1) : waypoints.slice(0, -1))
+    .slice(0, 8)
+    .map((wp) => encodeURIComponent(`${wp.lat},${wp.lng}`))
+    .join('%7C'); // '|' をパーセントエンコード
+
   const parts = [
     'api=1',
     `origin=${encodeURIComponent(origin)}`,
     `destination=${encodeURIComponent(destStr)}`,
     `travelmode=driving`,
+    `dir_action=navigate`,
   ];
-  if (intermediates) {
-    parts.push(`waypoints=${intermediates}`); // keep '|' unencoded
+  if (encodedWaypoints) {
+    parts.push(`waypoints=${encodedWaypoints}`);
   }
 
   return `${base}?${parts.join('&')}`;

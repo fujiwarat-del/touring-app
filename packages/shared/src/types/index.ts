@@ -26,6 +26,7 @@ export interface Route {
   caution: string;
   waypointObjects: WaypointObject[];
   highlightWaypoints: WaypointObject[];
+  mapUrl?: string;            // Google Maps 共有URL（手動投稿時）
   createdAt?: string;         // ISO date string
   userId?: string;
   isSaved?: boolean;
@@ -66,7 +67,9 @@ export interface CommunityPost {
   comment: string;
   likes: number;
   likedBy: string[];
-  departureArea: string;      // e.g. "東京" | "大阪" etc.
+  reactions?: Record<string, number>;  // スタンプリアクション (type → count)
+  departureArea: string;      // e.g. "関東" | "北海道" etc.
+  prefectures: string[];      // e.g. ["神奈川", "静岡"] (複数可)
   tags: string[];
   createdAt: string | object;  // ISO date string or Firestore FieldValue/Timestamp
   updatedAt?: string | object;
@@ -88,26 +91,29 @@ export interface UserProfile {
 // Enums / Union Types
 // ============================================================
 
-export type BikeType = '大型' | '中型' | 'オフロード' | 'スクーター';
+export type BikeType = '大型' | '中型' | 'オフロード' | '小型125cc以下';
 
 export type TouringPurpose =
   | 'ワインディング'
   | '温泉'
   | '海沿い'
+  | '川沿い'
   | 'グルメ'
   | '道の駅'
-  | '絶景';
+  | '絶景'
+  | '林道'
+  | 'キャンプ'
+  | '湖・高原'
+  | '城・史跡';
 
 export type RidingPreference =
   | '信号少な目'
   | '高速使わない'
-  | '峠道'
-  | '下道'
-  | '川沿い';
+  | '峠道';
 
 export type RouteMode = 'free' | 'destination';
 
-export type ReturnType = 'none' | 'loop' | 'same';
+export type ReturnType = 'none' | 'loop' | 'same' | 'different';
 
 export type Duration = 30 | 60 | 90 | 120 | 150 | 180 | 240 | 300 | 360;
 
