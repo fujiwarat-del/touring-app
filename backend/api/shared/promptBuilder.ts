@@ -5,23 +5,36 @@ export function buildPrompt(req: GenerateRouteRequest): string {
     lat, lng, locationName, bikeType, purposes, preferences,
     duration, routeMode, returnType, destination,
     emptyRoadMode, todayInfo, weatherInfo,
+    planningMode = 'time', targetDistanceKm,
   } = req;
 
   const locationStr = locationName
     ? `${locationName}（緯度: ${lat.toFixed(4)}, 経度: ${lng.toFixed(4)}）`
     : `緯度: ${lat.toFixed(4)}, 経度: ${lng.toFixed(4)}`;
 
-  const hours = duration / 60;
-  const durationStr = hours >= 1
-    ? `${hours.toFixed(1).replace(/\.0$/, '')}時間`
-    : `${duration}分`;
-
-  // 走行スタイルに応じた距離上限を計算
+  // 走行スタイルに応じた平均速度
   const avgSpeed = emptyRoadMode
     ? 28   // 空いている道優先：山道・ワインディング多用 → 平均28km/h
     : 55;  // 時間優先：高速活用 → 平均55km/h
-  const maxDistanceKm = Math.round(hours * avgSpeed);
-  const distanceGuide = `${Math.round(maxDistanceKm * 0.8)}〜${maxDistanceKm}km`;
+
+  // 距離モード vs 時間モードで上限距離と表示文字列を切り替え
+  const isDistanceMode = planningMode === 'distance' && targetDistanceKm != null;
+  const maxDistanceKm = isDistanceMode
+    ? targetDistanceKm!
+    : Math.round((duration / 60) * avgSpeed);
+
+  const hours = isDistanceMode
+    ? maxDistanceKm / avgSpeed                     // 距離÷速度で推定時間
+    : duration / 60;
+  const durationStr = isDistanceMode
+    ? `約${Math.round(hours * 10) / 10}時間（${targetDistanceKm}kmから推算）`
+    : hours >= 1
+      ? `${hours.toFixed(1).replace(/\.0$/, '')}時間`
+      : `${duration}分`;
+
+  const distanceGuide = isDistanceMode
+    ? `${Math.round(maxDistanceKm * 0.9)}〜${Math.round(maxDistanceKm * 1.1)}km`  // ±10%
+    : `${Math.round(maxDistanceKm * 0.8)}〜${maxDistanceKm}km`;
 
   const returnStr =
     returnType === 'loop' ? '帰り: ループで出発地に戻る' :
@@ -55,8 +68,10 @@ ${locationStr}
 - バイク種類: ${bikeType}
 - 目的: ${purposes.join('、')}
 - 走行スタイル: ${preferences.join('、')}
-- 所要時間: ${durationStr}（厳守）
-- 適切な距離の目安: ${distanceGuide}（この範囲内に収めること）
+- プランニングモード: ${isDistanceMode ? `📍 距離指定（目標 ${targetDistanceKm}km）` : `⏱️ 時間指定（${durationStr}）`}
+${isDistanceMode
+  ? `- 走行距離の目標: **${targetDistanceKm}km**（±10%以内 = ${distanceGuide}に収めること）\n- 所要時間: AIが最適な時間で計算すること（distanceに合わせた自然な時間を設定）`
+  : `- 所要時間: ${durationStr}（厳守）\n- 適切な距離の目安: ${distanceGuide}（この範囲内に収めること）`}
 - ルートモード: ${modeStr}
 - ${returnStr}
 - ${roadStr}
@@ -115,8 +130,11 @@ ${weatherStr ? `- ${weatherStr}` : ''}
 5. 季節「${todayInfo.season}」と交通状況「${todayInfo.trafficLabel}」を考慮すること
 6. 3ルートはそれぞれ異なるキャラクター（難易度・方向・テーマ）を持たせること
 7. 出発地点から実際に行ける現実的なルートのみを提案すること
-8. distanceフィールドは必ず「適切な距離の目安: ${distanceGuide}」の範囲内に収めること。この距離を大幅に超えるルートは所要時間内に走り切れないため絶対に提案しないこと
-9. timeフィールドはGoogle Mapsの経路案内で表示される所要時間に近い現実的な値を記載すること。道路種別ごとの目安速度：【峠・ワインディング・山岳道路】平均20〜25km/h、【山間の一般道・県道】平均25〜35km/h、【平地の国道・幹線道路】平均35〜45km/h、【高速道路】平均80km/h。ユーザーが指定した所要時間「${durationStr}」と大きくズレないこと
+${isDistanceMode
+  ? `8. distanceフィールドは必ず「${distanceGuide}」の範囲内に収めること（目標 ${targetDistanceKm}km ± 10%）。この距離から大きく外れるルートは絶対に提案しないこと
+9. timeフィールドはGoogle Mapsの経路案内で表示される所要時間に近い現実的な値を記載すること。道路種別ごとの目安速度：【峠・ワインディング・山岳道路】平均20〜25km/h、【山間の一般道・県道】平均25〜35km/h、【平地の国道・幹線道路】平均35〜45km/h、【高速道路】平均80km/h`
+  : `8. distanceフィールドは必ず「適切な距離の目安: ${distanceGuide}」の範囲内に収めること。この距離を大幅に超えるルートは所要時間内に走り切れないため絶対に提案しないこと
+9. timeフィールドはGoogle Mapsの経路案内で表示される所要時間に近い現実的な値を記載すること。道路種別ごとの目安速度：【峠・ワインディング・山岳道路】平均20〜25km/h、【山間の一般道・県道】平均25〜35km/h、【平地の国道・幹線道路】平均35〜45km/h、【高速道路】平均80km/h。ユーザーが指定した所要時間「${durationStr}」と大きくズレないこと`}
 10. 【バイクアクセス厳守】以下の場所は絶対に経由地・目的地に含めないこと：
     - 車道のない山頂・登山道のみでアクセスする場所（例: 山頂の展望台で車道がないもの、登山でしか行けない場所）
     - 歩行者専用エリア・遊歩道のみの場所

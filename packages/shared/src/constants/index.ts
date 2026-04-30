@@ -152,6 +152,21 @@ export const DURATION_OPTIONS: Array<{ value: number; label: string }> = [
 ];
 
 // ============================================================
+// Distance Options (距離モード用)
+// ============================================================
+
+export const DISTANCE_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 50,  label: '50km' },
+  { value: 100, label: '100km' },
+  { value: 150, label: '150km' },
+  { value: 200, label: '200km' },
+  { value: 250, label: '250km' },
+  { value: 300, label: '300km' },
+  { value: 400, label: '400km' },
+  { value: 500, label: '500km' },
+];
+
+// ============================================================
 // Traffic Level Config
 // ============================================================
 

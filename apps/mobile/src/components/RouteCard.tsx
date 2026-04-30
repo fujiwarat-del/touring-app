@@ -88,15 +88,15 @@ export function RouteCard({
         </View>
       </View>
 
-      {/* Stats row */}
+      {/* Stats row - 時間を先頭に */}
       <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={styles.statIcon}>📍</Text>
-          <Text style={styles.statValue}>{route.distance}</Text>
-        </View>
         <View style={styles.statItem}>
           <Text style={styles.statIcon}>⏱️</Text>
           <Text style={styles.statValue}>{route.time}</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statIcon}>📍</Text>
+          <Text style={styles.statValue}>{route.distance}</Text>
         </View>
         <View style={[styles.badge, { backgroundColor: congestionColor + '20' }]}>
           <Text style={[styles.badgeText, { color: congestionColor }]}>

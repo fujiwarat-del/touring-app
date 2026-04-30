@@ -75,6 +75,8 @@ export interface CommunityPost {
   updatedAt?: string | object;
 }
 
+export type PlanningMode = 'time' | 'distance';
+
 export interface GenerateRouteRequest {
   lat: number;
   lng: number;
@@ -89,4 +91,6 @@ export interface GenerateRouteRequest {
   emptyRoadMode: boolean;
   todayInfo: TodayInfo;
   weatherInfo?: WeatherInfo;
+  planningMode?: PlanningMode;     // 'time'（デフォルト） or 'distance'
+  targetDistanceKm?: number;       // 距離モード時のみ（km）
 }

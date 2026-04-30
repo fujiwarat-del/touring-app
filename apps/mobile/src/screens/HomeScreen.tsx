@@ -17,6 +17,7 @@ import {
   PURPOSES,
   PREFS,
   DURATION_OPTIONS,
+  DISTANCE_OPTIONS,
   APP_CONFIG,
 } from '@touring/shared';
 import type {
@@ -26,6 +27,7 @@ import type {
   RouteMode,
   ReturnType,
   WeatherInfo,
+  PlanningMode,
 } from '@touring/shared';
 import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
@@ -58,6 +60,8 @@ export default function HomeScreen() {
   const [returnType, setReturnType] = useState<ReturnType>('none');
   const [destination, setDestination] = useState('');
   const [roadSearchMode, setRoadSearchMode] = useState<'normal' | 'empty'>('normal');
+  const [planningMode, setPlanningMode] = useState<PlanningMode>('time');
+  const [targetDistance, setTargetDistance] = useState(200); // km
   const [generating, setGenerating] = useState(false);
 
   // Manual departure location
@@ -164,6 +168,12 @@ export default function HomeScreen() {
 
     setGenerating(true);
     try {
+      // 距離モード時は距離から推算した所要時間をdurationに設定
+      const avgSpeed = roadSearchMode === 'empty' ? 28 : 55;
+      const derivedDuration = planningMode === 'distance'
+        ? Math.min(360, Math.max(30, Math.round(targetDistance / avgSpeed * 60 / 30) * 30)) as any
+        : duration as any;
+
       const result = await callClaude({
         lat: effectiveLat,
         lng: effectiveLng,
@@ -171,13 +181,15 @@ export default function HomeScreen() {
         bikeType,
         purposes: selectedPurposes,
         preferences: selectedPrefs,
-        duration: duration as any,
+        duration: derivedDuration,
         routeMode,
         returnType,
         destination: destination.trim() || undefined,
         emptyRoadMode: roadSearchMode === 'empty',
         todayInfo,
         weatherInfo: weather ?? undefined,
+        planningMode,
+        targetDistanceKm: planningMode === 'distance' ? targetDistance : undefined,
       });
 
       navigation.navigate('Results', {
@@ -207,6 +219,8 @@ export default function HomeScreen() {
     returnType,
     destination,
     roadSearchMode,
+    planningMode,
+    targetDistance,
     todayInfo,
     weather,
     navigation,
@@ -527,54 +541,118 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Duration + 目安距離 */}
+        {/* Planning Mode + Duration/Distance */}
         <View style={[styles.section, routeMode === 'destination' && styles.sectionDisabled]}
               pointerEvents={routeMode === 'destination' ? 'none' : 'auto'}>
           <Text style={[styles.sectionTitle, routeMode === 'destination' && styles.textDisabled]}>
-            ⏱️ 走行時間{routeMode === 'destination' ? '（目的地指定時は不使用）' : ''}
+            📐 プランニング{routeMode === 'destination' ? '（目的地指定時は不使用）' : ''}
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.durationScroll}
-          >
-            {DURATION_OPTIONS.map((d) => (
-              <TouchableOpacity
-                key={d.value}
-                style={[
-                  styles.durationChip,
-                  duration === d.value && styles.durationChipSelected,
-                ]}
-                onPress={() => setDuration(d.value)}
+
+          {/* 時間 / 距離 トグル */}
+          <View style={styles.modeToggleRow}>
+            <TouchableOpacity
+              style={[styles.modeToggleBtn, planningMode === 'time' && styles.modeToggleBtnActive]}
+              onPress={() => setPlanningMode('time')}
+            >
+              <Text style={[styles.modeToggleText, planningMode === 'time' && styles.modeToggleTextActive]}>
+                ⏱️ 走行時間
+              </Text>
+              <Text style={[styles.modeToggleSub, planningMode === 'time' && styles.modeToggleSubActive]}>
+                時間を指定してルート提案
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeToggleBtn, planningMode === 'distance' && styles.modeToggleBtnActive]}
+              onPress={() => setPlanningMode('distance')}
+            >
+              <Text style={[styles.modeToggleText, planningMode === 'distance' && styles.modeToggleTextActive]}>
+                📍 走行距離
+              </Text>
+              <Text style={[styles.modeToggleSub, planningMode === 'distance' && styles.modeToggleSubActive]}>
+                距離を指定してルート提案
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {planningMode === 'time' ? (
+            <>
+              <Text style={styles.planningSubLabel}>走行時間を選択</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.durationScroll}
               >
-                <Text
-                  style={[
-                    styles.durationText,
-                    duration === d.value && styles.durationTextSelected,
-                  ]}
-                >
-                  {d.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          {/* 目安距離（ルート検索タイプに連動） */}
-          {routeMode !== 'destination' && (() => {
-            const hours = duration / 60;
-            const avgSpeed = roadSearchMode === 'empty' ? 28 : 55;
-            const maxDist = Math.round(hours * avgSpeed);
-            const minDist = Math.round(maxDist * 0.8);
-            return (
-              <View style={styles.distanceGuide}>
-                <Text style={styles.distanceGuideText}>
-                  📏 走行距離の目安：約{minDist}〜{maxDist}km
-                </Text>
-                <Text style={styles.distanceGuideSub}>
-                  {roadSearchMode === 'empty' ? '山道・ワインディング中心のため短め' : '高速活用により長距離走行可能'}
-                </Text>
-              </View>
-            );
-          })()}
+                {DURATION_OPTIONS.map((d) => (
+                  <TouchableOpacity
+                    key={d.value}
+                    style={[
+                      styles.durationChip,
+                      duration === d.value && styles.durationChipSelected,
+                    ]}
+                    onPress={() => setDuration(d.value)}
+                  >
+                    <Text style={[styles.durationText, duration === d.value && styles.durationTextSelected]}>
+                      {d.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              {routeMode !== 'destination' && (() => {
+                const hours = duration / 60;
+                const avgSpeed = roadSearchMode === 'empty' ? 28 : 55;
+                const maxDist = Math.round(hours * avgSpeed);
+                const minDist = Math.round(maxDist * 0.8);
+                return (
+                  <View style={styles.distanceGuide}>
+                    <Text style={styles.distanceGuideText}>
+                      📏 走行距離の目安：約{minDist}〜{maxDist}km
+                    </Text>
+                    <Text style={styles.distanceGuideSub}>
+                      {roadSearchMode === 'empty' ? '山道・ワインディング中心のため短め' : '高速活用により長距離走行可能'}
+                    </Text>
+                  </View>
+                );
+              })()}
+            </>
+          ) : (
+            <>
+              <Text style={styles.planningSubLabel}>走行距離を選択</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.durationScroll}
+              >
+                {DISTANCE_OPTIONS.map((d) => (
+                  <TouchableOpacity
+                    key={d.value}
+                    style={[
+                      styles.durationChip,
+                      targetDistance === d.value && styles.durationChipSelected,
+                    ]}
+                    onPress={() => setTargetDistance(d.value)}
+                  >
+                    <Text style={[styles.durationText, targetDistance === d.value && styles.durationTextSelected]}>
+                      {d.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              {routeMode !== 'destination' && (() => {
+                const avgSpeed = roadSearchMode === 'empty' ? 28 : 55;
+                const estimatedHours = Math.round(targetDistance / avgSpeed * 10) / 10;
+                return (
+                  <View style={styles.distanceGuide}>
+                    <Text style={styles.distanceGuideText}>
+                      ⏱️ 所要時間の目安：約{estimatedHours}時間
+                    </Text>
+                    <Text style={styles.distanceGuideSub}>
+                      {roadSearchMode === 'empty' ? '山道・ワインディング中心の推算値' : '高速活用時の推算値'}
+                    </Text>
+                  </View>
+                );
+              })()}
+            </>
+          )}
         </View>
 
         {/* Return Type */}
@@ -828,6 +906,13 @@ const styles = StyleSheet.create({
   },
   purposeLabelSelected: {
     color: COLORS.white,
+  },
+  planningSubLabel: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semiBold,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   durationScroll: {
     gap: SPACING.sm,

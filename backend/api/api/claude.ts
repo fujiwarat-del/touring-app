@@ -294,9 +294,11 @@ export default async function handler(
             wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
           }
           // 出発地から遠すぎる経由地・目的地を除去
-          const hours = routeRequest.duration / 60;
           const avgSpeed = routeRequest.emptyRoadMode ? 28 : 55;
-          const maxDistKm = Math.round(hours * avgSpeed);
+          const isDistanceMode = routeRequest.planningMode === 'distance' && routeRequest.targetDistanceKm != null;
+          const maxDistKm = isDistanceMode
+            ? routeRequest.targetDistanceKm!
+            : Math.round((routeRequest.duration / 60) * avgSpeed);
           const maxRadiusKm = Math.round(maxDistKm / 2);
           wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
           // For same-road return, force last waypoint to match start
@@ -325,20 +327,35 @@ export default async function handler(
 
         if (!traffic) return route; // API未設定 or エラー → 元のまま
 
-        const requestedMinutes = routeRequest.duration;
+        const isDistanceMode = routeRequest.planningMode === 'distance' && routeRequest.targetDistanceKm != null;
         const actualMinutes = Math.round(traffic.durationWithTrafficSeconds / 60);
-        const overMinutes = actualMinutes - requestedMinutes;
+        const actualKm = Math.round(traffic.distanceMeters / 1000);
 
         // 注意事項を構築
         const notes: string[] = [];
 
-        // 所要時間が大幅超過（30分以上）している場合は警告
-        if (overMinutes >= 30) {
-          notes.push(`⚠️ このルートの実際の所要時間は約${actualMinutes}分です。指定時間（${requestedMinutes}分）より約${overMinutes}分多くかかります。`);
-        } else if (traffic.delayMinutes >= 5) {
-          notes.push(`⚠️ 現在の渋滞により通常より約${traffic.delayMinutes}分多くかかる見込みです。`);
-        } else if (traffic.congestion === '低') {
-          notes.push('✅ 現在の交通状況は良好です。');
+        if (isDistanceMode) {
+          // 距離モード：指定距離との差を確認（±50km以内）
+          const targetKm = routeRequest.targetDistanceKm!;
+          const diffKm = Math.abs(actualKm - targetKm);
+          if (diffKm > 50) {
+            notes.push(`⚠️ このルートの実際の距離は約${actualKm}kmです。指定距離（${targetKm}km）と約${diffKm}kmの差があります。`);
+          } else if (traffic.delayMinutes >= 5) {
+            notes.push(`⚠️ 現在の渋滞により通常より約${traffic.delayMinutes}分多くかかる見込みです。`);
+          } else if (traffic.congestion === '低') {
+            notes.push('✅ 現在の交通状況は良好です。');
+          }
+        } else {
+          // 時間モード：指定時間との差を確認（±30分以内）
+          const requestedMinutes = routeRequest.duration;
+          const overMinutes = actualMinutes - requestedMinutes;
+          if (overMinutes >= 30) {
+            notes.push(`⚠️ このルートの実際の所要時間は約${actualMinutes}分です。指定時間（${requestedMinutes}分）より約${overMinutes}分多くかかります。`);
+          } else if (traffic.delayMinutes >= 5) {
+            notes.push(`⚠️ 現在の渋滞により通常より約${traffic.delayMinutes}分多くかかる見込みです。`);
+          } else if (traffic.congestion === '低') {
+            notes.push('✅ 現在の交通状況は良好です。');
+          }
         }
 
         if (route.caution) notes.unshift(route.caution);

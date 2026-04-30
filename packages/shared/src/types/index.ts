@@ -118,6 +118,8 @@ export type ReturnType = 'none' | 'loop' | 'same' | 'different';
 
 export type Duration = 30 | 60 | 90 | 120 | 150 | 180 | 240 | 300 | 360;
 
+export type PlanningMode = 'time' | 'distance';
+
 // ============================================================
 // API Request/Response types
 // ============================================================
@@ -136,6 +138,8 @@ export interface GenerateRouteRequest {
   emptyRoadMode: boolean;
   todayInfo: TodayInfo;
   weatherInfo?: WeatherInfo;
+  planningMode?: PlanningMode;     // 'time'（デフォルト） or 'distance'
+  targetDistanceKm?: number;       // 距離モード時のみ（km）
 }
 
 export interface GenerateRouteResponse {
