@@ -5,19 +5,11 @@
 import type { WaypointObject, Route } from '../types/index';
 
 /**
- * 経由地を「地点名」で表現する（座標より精度が高い）
- * 名前がある場合は名前を使い、ない場合のみ座標にフォールバック
- */
-function wpToString(wp: WaypointObject): string {
-  if (wp.name && wp.name.trim().length > 0) {
-    return wp.name.trim();
-  }
-  return `${wp.lat},${wp.lng}`;
-}
-
-/**
  * Build a Google Maps URL with waypoints
- * 経由地は座標ではなく地点名で渡すことで、海上・誤ルートを防ぐ
+ * 経由地・目的地は必ず座標（lat,lng）で渡す。
+ * 地点名はAIが生成した造語（例：「成田空港南側河川敷」）の場合、
+ * Google Mapsが地点を見つけられず正しいルートが開かれないため。
+ * 座標は常に正確にルーティングされる。
  */
 export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
   const waypoints = route.waypointObjects;
@@ -31,27 +23,26 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
 
   if (waypoints.length === 1) {
     const wp = waypoints[0];
-    const q = wp.name ? encodeURIComponent(wp.name) : `${wp.lat},${wp.lng}`;
-    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+    return `https://www.google.com/maps/search/?api=1&query=${wp.lat},${wp.lng}`;
   }
 
-  // 出発地：GPS座標（実際の現在地）を優先
-  const origin = startLat && startLng
+  // 出発地：GPS座標（実際の現在地）を優先、なければ最初の経由地座標
+  const origin = (startLat != null && startLng != null)
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
-  // 目的地：地点名を優先
+  // 目的地：座標を使用（地点名だとAI造語が見つからない場合がある）
   const destination = waypoints[waypoints.length - 1];
-  const destStr = wpToString(destination);
+  const destStr = `${destination.lat},${destination.lng}`;
 
-  // 中間経由地：地点名を優先（最大8か所）
-  const intermediateWps = (startLat && startLng
+  // 中間経由地：座標で渡す（最大8か所）
+  const intermediateWps = (startLat != null && startLng != null
     ? waypoints.slice(1, -1)
     : waypoints.slice(0, -1)
   ).slice(0, 8);
 
   const encodedWaypoints = intermediateWps
-    .map((wp) => encodeURIComponent(wpToString(wp)))
+    .map((wp) => encodeURIComponent(`${wp.lat},${wp.lng}`))
     .join('%7C');
 
   const base = 'https://www.google.com/maps/dir/';
