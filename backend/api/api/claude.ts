@@ -26,6 +26,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
  * 出発地から遠すぎる経由地・目的地を除去し、現実的なルートに絞り込む
  * - 全経由地（目的地含む）を maxRadiusKm でフィルタリング
  * - 直線合計距離が maxTotalKm を超えた時点で打ち切る
+ * - フィルタ後に中間地点が0になった場合は緩和した半径で救済する
  */
 function filterWaypoints(
   waypoints: { lat: number; lng: number; [key: string]: any }[],
@@ -35,30 +36,54 @@ function filterWaypoints(
   if (waypoints.length <= 1) return waypoints;
 
   const origin = waypoints[0];
-  const result: typeof waypoints = [origin];
-  let totalKm = 0;
 
-  for (let i = 1; i < waypoints.length; i++) {
-    const wp = waypoints[i];
-    const fromOrigin = haversineKm(origin.lat, origin.lng, wp.lat, wp.lng);
-    const fromPrev = haversineKm(
-      result[result.length - 1].lat, result[result.length - 1].lng,
-      wp.lat, wp.lng
-    );
+  const applyFilter = (radiusKm: number) => {
+    const res: typeof waypoints = [origin];
+    let totalKm = 0;
+    for (let i = 1; i < waypoints.length; i++) {
+      const wp = waypoints[i];
+      const fromOrigin = haversineKm(origin.lat, origin.lng, wp.lat, wp.lng);
+      const fromPrev = haversineKm(
+        res[res.length - 1].lat, res[res.length - 1].lng,
+        wp.lat, wp.lng
+      );
+      if (fromOrigin > radiusKm) continue;
+      if (totalKm + fromPrev > maxTotalKm * 1.2) break;
+      totalKm += fromPrev;
+      res.push(wp);
+    }
+    return res;
+  };
 
-    // 出発地から半径オーバー → スキップ（目的地も対象）
-    if (fromOrigin > maxRadiusKm) continue;
+  let result = applyFilter(maxRadiusKm);
 
-    // 直線合計距離オーバー → 打ち切り
-    if (totalKm + fromPrev > maxTotalKm * 1.2) break;
+  // 中間経由地が0になった場合（出発地+目的地だけ）→ 半径を1.6倍に緩和して再試行
+  if (result.length < 3 && waypoints.length >= 3) {
+    const relaxed = applyFilter(maxRadiusKm * 1.6);
+    if (relaxed.length >= 3) {
+      result = relaxed;
+    }
+  }
 
-    totalKm += fromPrev;
-    result.push(wp);
+  // さらに中間地点が0の場合 → 元の経由地リストから中間点に最も近いものを1つ挿入
+  if (result.length < 3 && waypoints.length >= 3) {
+    const dest = result[result.length - 1];
+    const midLat = (origin.lat + dest.lat) / 2;
+    const midLng = (origin.lng + dest.lng) / 2;
+    const intermediate = waypoints
+      .slice(1, -1) // 出発地・目的地を除く中間地点
+      .filter(wp => !result.includes(wp))
+      .sort((a, b) =>
+        haversineKm(midLat, midLng, a.lat, a.lng) -
+        haversineKm(midLat, midLng, b.lat, b.lng)
+      )[0];
+    if (intermediate) {
+      result.splice(result.length - 1, 0, intermediate);
+    }
   }
 
   // 最低でも出発地＋目的地の2点は確保
   if (result.length < 2) {
-    // 全部遠すぎる場合は出発地に最も近いものを目的地にする
     const sorted = waypoints.slice(1).sort((a, b) =>
       haversineKm(origin.lat, origin.lng, a.lat, a.lng) -
       haversineKm(origin.lat, origin.lng, b.lat, b.lng)
