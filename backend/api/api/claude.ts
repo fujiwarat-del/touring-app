@@ -333,6 +333,7 @@ export default async function handler(
 
         // 注意事項を構築
         const notes: string[] = [];
+        let overMinutes = 0; // 時間モードでのオーバー分数（ブロック外から参照するためここで宣言）
 
         if (isDistanceMode) {
           // 距離モード：指定距離との差を確認（±50km以内）
@@ -348,7 +349,7 @@ export default async function handler(
         } else {
           // 時間モード：指定時間との差を確認（±30分以内）
           const requestedMinutes = routeRequest.duration;
-          const overMinutes = actualMinutes - requestedMinutes;
+          overMinutes = actualMinutes - requestedMinutes;
           if (overMinutes >= 30) {
             notes.push(`⚠️ このルートの実際の所要時間は約${actualMinutes}分です。指定時間（${requestedMinutes}分）より約${overMinutes}分多くかかります。`);
           } else if (traffic.delayMinutes >= 5) {
