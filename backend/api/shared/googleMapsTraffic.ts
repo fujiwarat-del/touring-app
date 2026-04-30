@@ -44,7 +44,7 @@ export async function getTrafficAwareRoute(
     })),
     travelMode: 'DRIVE',
     routingPreference: 'TRAFFIC_AWARE',
-    departureTime: new Date().toISOString(),
+    departureTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(), // 2分後（現在時刻だとサーバー側で過去扱いされるため）
     routeModifiers: {
       avoidFerries: true,   // フェリー禁止
       avoidTolls: false,    // 有料道路は許可

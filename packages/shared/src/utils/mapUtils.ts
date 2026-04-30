@@ -5,7 +5,19 @@
 import type { WaypointObject, Route } from '../types/index';
 
 /**
+ * 経由地を「地点名」で表現する（座標より精度が高い）
+ * 名前がある場合は名前を使い、ない場合のみ座標にフォールバック
+ */
+function wpToString(wp: WaypointObject): string {
+  if (wp.name && wp.name.trim().length > 0) {
+    return wp.name.trim();
+  }
+  return `${wp.lat},${wp.lng}`;
+}
+
+/**
  * Build a Google Maps URL with waypoints
+ * 経由地は座標ではなく地点名で渡すことで、海上・誤ルートを防ぐ
  */
 export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
   const waypoints = route.waypointObjects;
@@ -19,29 +31,30 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
 
   if (waypoints.length === 1) {
     const wp = waypoints[0];
-    return `https://www.google.com/maps/search/?api=1&query=${wp.lat},${wp.lng}`;
+    const q = wp.name ? encodeURIComponent(wp.name) : `${wp.lat},${wp.lng}`;
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
   }
 
+  // 出発地：GPS座標（実際の現在地）を優先
   const origin = startLat && startLng
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
+  // 目的地：地点名を優先
   const destination = waypoints[waypoints.length - 1];
-  const destStr = `${destination.lat},${destination.lng}`;
+  const destStr = wpToString(destination);
 
-  // Intermediate waypoints: skip first (= origin) and last (= destination)
-  const intermediates = (startLat && startLng ? waypoints.slice(1, -1) : waypoints.slice(0, -1))
-    .slice(0, 8) // Google Maps allows max 8 waypoints in URL
-    .map((wp) => `${wp.lat},${wp.lng}`)
-    .join('|');
+  // 中間経由地：地点名を優先（最大8か所）
+  const intermediateWps = (startLat && startLng
+    ? waypoints.slice(1, -1)
+    : waypoints.slice(0, -1)
+  ).slice(0, 8);
 
-  // Google Maps Dir API URL（travelmode=driving で車モード固定）
+  const encodedWaypoints = intermediateWps
+    .map((wp) => encodeURIComponent(wpToString(wp)))
+    .join('%7C');
+
   const base = 'https://www.google.com/maps/dir/';
-  const encodedWaypoints = (startLat && startLng ? waypoints.slice(1, -1) : waypoints.slice(0, -1))
-    .slice(0, 8)
-    .map((wp) => encodeURIComponent(`${wp.lat},${wp.lng}`))
-    .join('%7C'); // '|' をパーセントエンコード
-
   const parts = [
     'api=1',
     `origin=${encodeURIComponent(origin)}`,

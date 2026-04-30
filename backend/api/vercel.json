@@ -34,6 +34,11 @@
       "dest": "/api/health.ts"
     },
     {
+      "src": "/api/test-maps",
+      "methods": ["GET"],
+      "dest": "/api/test-maps.ts"
+    },
+    {
       "src": "/api/notify",
       "methods": ["POST"],
       "dest": "/api/notify.ts",
