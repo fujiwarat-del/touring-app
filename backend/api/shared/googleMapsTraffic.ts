@@ -46,8 +46,8 @@ export async function getTrafficAwareRoute(
     routingPreference: 'TRAFFIC_AWARE',
     departureTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(), // 2分後（現在時刻だとサーバー側で過去扱いされるため）
     routeModifiers: {
-      avoidFerries: true,   // フェリー禁止
-      avoidTolls: false,    // 有料道路は許可
+      avoidFerries: false,  // フェリーは許可（ユーザーが意図的に使う場合あり）
+      avoidTolls: false,
     },
   };
 
