@@ -37,7 +37,6 @@
     ]
   },
   "scripts": {
-    "postinstall": "yarn workspace @touring/shared build",
     "mobile": "yarn workspace @touring/mobile start",
     "web": "yarn workspace @touring/web dev",
     "api": "yarn workspace @touring/api dev",
