@@ -66,6 +66,11 @@ export function buildPrompt(req: GenerateRouteRequest): string {
     ? `現在の天気: ${weatherInfo.weatherDescription} ${weatherInfo.icon}, 気温: ${weatherInfo.temperature}°C, 風速: ${weatherInfo.windSpeed}km/h, 降水: ${weatherInfo.precipitation}mm`
     : '';
 
+  // 経由地間の最大距離を計算
+  const maxLegsCount = 5;
+  const maxPerLegKm = Math.round(maxDistanceKm / maxLegsCount);
+  const maxRadiusKm = Math.round(maxDistanceKm / 2);
+
   const prompt = `あなたはバイクツーリングの専門家AIです。以下の条件で日本国内のバイクツーリングルートを3つ提案してください。
 
 ## 出発地点
@@ -80,6 +85,12 @@ ${locationStr}
 - ルートモード: ${modeStr}
 - ${returnStr}
 - ${roadStr}
+
+## 【最重要】経由地の距離制約
+- 出発地から半径 **${maxRadiusKm}km以内** の地点のみ経由地・目的地に設定すること
+- 隣接する経由地同士の **直線距離は最大${maxPerLegKm}km以内** にすること
+- 全経由地をGoogle Mapsで繋いだ実際の走行距離が **${distanceGuide}** に収まること
+- この制約を守れないルートは提案しないこと
 
 ## 本日の状況
 - 日付: ${todayInfo.dateStr}

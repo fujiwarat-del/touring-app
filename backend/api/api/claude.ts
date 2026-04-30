@@ -233,24 +233,30 @@ export default async function handler(
 
         if (!traffic) return route; // API未設定 or エラー → 元のまま
 
-        // 渋滞遅延がある場合は注意事項に追記
-        const trafficNote =
-          traffic.delayMinutes >= 5
-            ? `⚠️ 現在の渋滞により通常より約${traffic.delayMinutes}分多くかかる見込みです。`
-            : traffic.congestion === '低'
-            ? '✅ 現在の交通状況は良好です。'
-            : '';
+        const requestedMinutes = routeRequest.duration;
+        const actualMinutes = Math.round(traffic.durationWithTrafficSeconds / 60);
+        const overMinutes = actualMinutes - requestedMinutes;
 
-        const updatedCaution = trafficNote
-          ? `${route.caution ? route.caution + '\n' : ''}${trafficNote}`
-          : route.caution;
+        // 注意事項を構築
+        const notes: string[] = [];
+
+        // 所要時間が大幅超過（30分以上）している場合は警告
+        if (overMinutes >= 30) {
+          notes.push(`⚠️ このルートの実際の所要時間は約${actualMinutes}分です。指定時間（${requestedMinutes}分）より約${overMinutes}分多くかかります。`);
+        } else if (traffic.delayMinutes >= 5) {
+          notes.push(`⚠️ 現在の渋滞により通常より約${traffic.delayMinutes}分多くかかる見込みです。`);
+        } else if (traffic.congestion === '低') {
+          notes.push('✅ 現在の交通状況は良好です。');
+        }
+
+        if (route.caution) notes.unshift(route.caution);
+        const updatedCaution = notes.join('\n');
 
         return {
           ...route,
-          // 実際の渋滞込み時間・距離で上書き
           time: formatDurationSec(traffic.durationWithTrafficSeconds),
           distance: formatDistanceM(traffic.distanceMeters),
-          congestion: traffic.congestion,
+          congestion: overMinutes >= 30 ? '高' : traffic.congestion,
           caution: updatedCaution,
         };
       })
