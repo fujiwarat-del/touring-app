@@ -27,6 +27,7 @@ export interface Route {
   waypointObjects: WaypointObject[];
   highlightWaypoints: WaypointObject[];
   mapUrl?: string;            // Google Maps 共有URL（手動投稿時）
+  distanceVerified?: boolean; // Google Maps Routes APIで検証済みか
   createdAt?: string;         // ISO date string
   userId?: string;
   isSaved?: boolean;

@@ -110,6 +110,17 @@ export function RouteCard({
         </View>
       </View>
 
+      {/* 距離検証バッジ */}
+      {route.distanceVerified ? (
+        <View style={styles.verifiedBadge}>
+          <Text style={styles.verifiedText}>✅ Google Maps確認済みの距離・時間</Text>
+        </View>
+      ) : (
+        <View style={styles.estimatedBadge}>
+          <Text style={styles.estimatedText}>⚠️ AI推定値 · Google Mapsと異なる場合があります</Text>
+        </View>
+      )}
+
       {/* Description */}
       <Text style={styles.description} numberOfLines={expanded ? undefined : 2}>
         {route.description}
@@ -297,6 +308,32 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: FONT_SIZE.xs,
     fontWeight: '700',
+  },
+  verifiedBadge: {
+    backgroundColor: '#E8F8F3',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    marginBottom: SPACING.sm,
+    alignSelf: 'flex-start',
+  },
+  verifiedText: {
+    fontSize: FONT_SIZE.xs,
+    color: '#1D9E75',
+    fontWeight: '600',
+  },
+  estimatedBadge: {
+    backgroundColor: '#FEF7E6',
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    marginBottom: SPACING.sm,
+    alignSelf: 'flex-start',
+  },
+  estimatedText: {
+    fontSize: FONT_SIZE.xs,
+    color: '#E07800',
+    fontWeight: '600',
   },
   description: {
     fontSize: FONT_SIZE.md,

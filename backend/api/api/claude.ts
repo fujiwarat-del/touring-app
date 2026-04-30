@@ -23,25 +23,50 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 /**
- * 出発地から遠すぎる経由地を除去し、現実的なルートに絞り込む
- * maxRadiusKm: 出発地からの最大直線距離
+ * 出発地から遠すぎる経由地・目的地を除去し、現実的なルートに絞り込む
+ * - 全経由地（目的地含む）を maxRadiusKm でフィルタリング
+ * - 直線合計距離が maxTotalKm を超えた時点で打ち切る
  */
 function filterWaypoints(
   waypoints: { lat: number; lng: number; [key: string]: any }[],
-  maxRadiusKm: number
+  maxRadiusKm: number,
+  maxTotalKm: number
 ): typeof waypoints {
-  if (waypoints.length <= 2) return waypoints;
+  if (waypoints.length <= 1) return waypoints;
 
   const origin = waypoints[0];
-  const destination = waypoints[waypoints.length - 1];
+  const result: typeof waypoints = [origin];
+  let totalKm = 0;
 
-  // 中間地点のうち出発地から maxRadiusKm 以内のものだけ残す
-  const filtered = waypoints.slice(1, -1).filter((wp) => {
-    const dist = haversineKm(origin.lat, origin.lng, wp.lat, wp.lng);
-    return dist <= maxRadiusKm;
-  });
+  for (let i = 1; i < waypoints.length; i++) {
+    const wp = waypoints[i];
+    const fromOrigin = haversineKm(origin.lat, origin.lng, wp.lat, wp.lng);
+    const fromPrev = haversineKm(
+      result[result.length - 1].lat, result[result.length - 1].lng,
+      wp.lat, wp.lng
+    );
 
-  return [origin, ...filtered, destination];
+    // 出発地から半径オーバー → スキップ（目的地も対象）
+    if (fromOrigin > maxRadiusKm) continue;
+
+    // 直線合計距離オーバー → 打ち切り
+    if (totalKm + fromPrev > maxTotalKm * 1.2) break;
+
+    totalKm += fromPrev;
+    result.push(wp);
+  }
+
+  // 最低でも出発地＋目的地の2点は確保
+  if (result.length < 2) {
+    // 全部遠すぎる場合は出発地に最も近いものを目的地にする
+    const sorted = waypoints.slice(1).sort((a, b) =>
+      haversineKm(origin.lat, origin.lng, a.lat, a.lng) -
+      haversineKm(origin.lat, origin.lng, b.lat, b.lng)
+    );
+    result.push(sorted[0]);
+  }
+
+  return result;
 }
 
 // ============================================================
@@ -243,12 +268,12 @@ export default async function handler(
           if (wps.length > 0) {
             wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
           }
-          // 出発地から遠すぎる経由地を除去
+          // 出発地から遠すぎる経由地・目的地を除去
           const hours = routeRequest.duration / 60;
           const avgSpeed = routeRequest.emptyRoadMode ? 28 : 55;
           const maxDistKm = Math.round(hours * avgSpeed);
           const maxRadiusKm = Math.round(maxDistKm / 2);
-          wps = filterWaypoints(wps, maxRadiusKm);
+          wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
           // For same-road return, force last waypoint to match start
           if (routeRequest.returnType === 'same' && wps.length > 1) {
             wps[wps.length - 1] = {
@@ -300,6 +325,7 @@ export default async function handler(
           distance: formatDistanceM(traffic.distanceMeters),
           congestion: overMinutes >= 30 ? '高' : traffic.congestion,
           caution: updatedCaution,
+          distanceVerified: true, // Google Maps Routes API で検証済み
         };
       })
     );
