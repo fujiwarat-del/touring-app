@@ -8,6 +8,42 @@ import {
   formatDistanceM,
 } from '../shared/googleMapsTraffic';
 
+// ──────────────────────────────────────────────
+// Haversine 距離計算（km）
+// ──────────────────────────────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * 出発地から遠すぎる経由地を除去し、現実的なルートに絞り込む
+ * maxRadiusKm: 出発地からの最大直線距離
+ */
+function filterWaypoints(
+  waypoints: { lat: number; lng: number; [key: string]: any }[],
+  maxRadiusKm: number
+): typeof waypoints {
+  if (waypoints.length <= 2) return waypoints;
+
+  const origin = waypoints[0];
+  const destination = waypoints[waypoints.length - 1];
+
+  // 中間地点のうち出発地から maxRadiusKm 以内のものだけ残す
+  const filtered = waypoints.slice(1, -1).filter((wp) => {
+    const dist = haversineKm(origin.lat, origin.lng, wp.lat, wp.lng);
+    return dist <= maxRadiusKm;
+  });
+
+  return [origin, ...filtered, destination];
+}
+
 // ============================================================
 // Rate limiting (in-memory, resets on cold start)
 // For production, use Redis/Vercel KV for distributed rate limiting
@@ -202,11 +238,17 @@ export default async function handler(
         description: String(r.description ?? ''),
         caution: String(r.caution ?? ''),
         waypointObjects: (() => {
-          const wps = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
+          let wps = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
           // Override first waypoint coords with actual GPS to prevent drift
           if (wps.length > 0) {
             wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
           }
+          // 出発地から遠すぎる経由地を除去
+          const hours = routeRequest.duration / 60;
+          const avgSpeed = routeRequest.emptyRoadMode ? 28 : 55;
+          const maxDistKm = Math.round(hours * avgSpeed);
+          const maxRadiusKm = Math.round(maxDistKm / 2);
+          wps = filterWaypoints(wps, maxRadiusKm);
           // For same-road return, force last waypoint to match start
           if (routeRequest.returnType === 'same' && wps.length > 1) {
             wps[wps.length - 1] = {
