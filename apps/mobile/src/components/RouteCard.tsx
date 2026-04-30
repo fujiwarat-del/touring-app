@@ -56,11 +56,10 @@ export function RouteCard({
 
   const handleOpenMap = async () => {
     const url = makeMapUrl(route, startLat, startLng);
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
+    try {
       await Linking.openURL(url);
-    } else {
-      Alert.alert('エラー', 'Google Mapsを開けませんでした');
+    } catch {
+      Alert.alert('エラー', 'Google Mapsを開けませんでした。Google Mapsアプリがインストールされているか確認してください。');
     }
   };
 

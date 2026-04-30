@@ -1,18 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import type { TodayInfo } from '@touring/shared';
 import { TRAFFIC_LEVELS } from '@touring/shared';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS } from '../theme/spacing';
+import type { TodayInfoWithRealtime } from '../hooks/useTodayInfo';
 
 interface TrafficBannerProps {
-  todayInfo: TodayInfo;
+  todayInfo: TodayInfo | TodayInfoWithRealtime;
 }
 
 export function TrafficBanner({ todayInfo }: TrafficBannerProps) {
   const config = TRAFFIC_LEVELS[todayInfo.trafficLevel - 1] ?? TRAFFIC_LEVELS[2];
-
   const trafficDots = Array.from({ length: 5 }, (_, i) => i < todayInfo.trafficLevel);
+  const isRealtime = (todayInfo as TodayInfoWithRealtime).isRealtimeTraffic ?? false;
+  const isLoading = (todayInfo as TodayInfoWithRealtime).trafficLoading ?? false;
 
   return (
     <View
@@ -30,23 +32,32 @@ export function TrafficBanner({ todayInfo }: TrafficBannerProps) {
               {todayInfo.holidayName ?? '休日'}
             </Text>
           )}
+          {isRealtime && (
+            <Text style={styles.realtimeTag}>📡 リアルタイム</Text>
+          )}
         </View>
       </View>
       <View style={styles.rightSection}>
-        <Text style={[styles.trafficLabel, { color: config.color }]}>
-          {config.label}
-        </Text>
-        <View style={styles.dotsRow}>
-          {trafficDots.map((filled, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                { backgroundColor: filled ? config.color : COLORS.border },
-              ]}
-            />
-          ))}
-        </View>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={config.color} />
+        ) : (
+          <>
+            <Text style={[styles.trafficLabel, { color: config.color }]}>
+              {config.label}
+            </Text>
+            <View style={styles.dotsRow}>
+              {trafficDots.map((filled, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    { backgroundColor: filled ? config.color : COLORS.border },
+                  ]}
+                />
+              ))}
+            </View>
+          </>
+        )}
       </View>
     </View>
   );
@@ -93,6 +104,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: RADIUS.full,
     overflow: 'hidden',
+  },
+  realtimeTag: {
+    fontSize: FONT_SIZE.xs,
+    color: '#1D9E75',
+    backgroundColor: '#E8F8F3',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+    fontWeight: '600',
   },
   rightSection: {
     alignItems: 'flex-end',

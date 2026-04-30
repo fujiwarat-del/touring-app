@@ -10,7 +10,6 @@ import {
   TextInput,
   SafeAreaView,
 } from 'react-native';
-import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import {
@@ -42,8 +41,8 @@ type NavigationProp = StackNavigationProp<RootStackParamList, 'HomeTabs'>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const todayInfo = useTodayInfo();
   const location = useLocation();
+  const todayInfo = useTodayInfo(location.lat, location.lng);
 
   // Weather
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
@@ -95,17 +94,30 @@ export default function HomeScreen() {
     if (!manualLocationText.trim()) return;
     setGeocoding(true);
     try {
-      const results = await Location.geocodeAsync(manualLocationText.trim());
-      if (results.length > 0) {
-        const { latitude, longitude } = results[0];
-        setManualLat(latitude);
-        setManualLng(longitude);
-        setManualLocationName(manualLocationText.trim());
+      // OpenStreetMap Nominatim API（デバイス依存なし・無料）
+      const query = encodeURIComponent(manualLocationText.trim());
+      const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&accept-language=ja&countrycodes=jp`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'TouringPlannerApp/1.0' },
+      });
+      if (!res.ok) throw new Error('network error');
+      const data = await res.json();
+      if (data.length > 0) {
+        const { lat, lon, display_name } = data[0];
+        setManualLat(parseFloat(lat));
+        setManualLng(parseFloat(lon));
+        // 表示名を簡略化（最初の2〜3要素）
+        const shortName = (display_name as string)
+          .split(',')
+          .slice(0, 2)
+          .map((s: string) => s.trim())
+          .join(' ');
+        setManualLocationName(shortName || manualLocationText.trim());
       } else {
-        Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください');
+        Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください（例: 箱根、静岡市）');
       }
     } catch {
-      Alert.alert('エラー', '場所の検索に失敗しました');
+      Alert.alert('エラー', 'ネットワークエラーが発生しました。通信状態を確認してください。');
     } finally {
       setGeocoding(false);
     }

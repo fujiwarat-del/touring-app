@@ -2,6 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { buildPrompt } from '../shared/promptBuilder';
 import type { GenerateRouteRequest, Route } from '../shared/types';
+import {
+  getTrafficAwareRoute,
+  formatDurationSec,
+  formatDistanceM,
+} from '../shared/googleMapsTraffic';
 
 // ============================================================
 // Rate limiting (in-memory, resets on cold start)
@@ -215,8 +220,44 @@ export default async function handler(
         highlightWaypoints: Array.isArray(r.highlightWaypoints) ? r.highlightWaypoints : [],
       }));
 
+    // ── Google Maps でリアルタイム渋滞情報を付加 ──────────────
+    // API キーが設定されている場合のみ実行（設定なしでも動作する）
+    const enrichedRoutes = await Promise.all(
+      routes.map(async (route) => {
+        const wps = route.waypointObjects;
+        if (!wps || wps.length < 2) return route;
+
+        const traffic = await getTrafficAwareRoute(
+          wps.map((wp) => ({ lat: wp.lat, lng: wp.lng }))
+        );
+
+        if (!traffic) return route; // API未設定 or エラー → 元のまま
+
+        // 渋滞遅延がある場合は注意事項に追記
+        const trafficNote =
+          traffic.delayMinutes >= 5
+            ? `⚠️ 現在の渋滞により通常より約${traffic.delayMinutes}分多くかかる見込みです。`
+            : traffic.congestion === '低'
+            ? '✅ 現在の交通状況は良好です。'
+            : '';
+
+        const updatedCaution = trafficNote
+          ? `${route.caution ? route.caution + '\n' : ''}${trafficNote}`
+          : route.caution;
+
+        return {
+          ...route,
+          // 実際の渋滞込み時間・距離で上書き
+          time: formatDurationSec(traffic.durationWithTrafficSeconds),
+          distance: formatDistanceM(traffic.distanceMeters),
+          congestion: traffic.congestion,
+          caution: updatedCaution,
+        };
+      })
+    );
+
     res.status(200).json({
-      routes,
+      routes: enrichedRoutes,
       generatedAt: new Date().toISOString(),
     });
   } catch (err: unknown) {

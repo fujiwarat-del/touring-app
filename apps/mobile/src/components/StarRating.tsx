@@ -18,7 +18,8 @@ export function StarRating({
   size = 'md',
   showNumber = false,
 }: StarRatingProps) {
-  const clampedScore = Math.max(0, Math.min(score, maxScore));
+  const safeScore = typeof score === 'number' && !isNaN(score) ? score : Number(score) || 0;
+  const clampedScore = Math.max(0, Math.min(safeScore, maxScore));
   const fontSize =
     size === 'sm' ? FONT_SIZE.xs :
     size === 'lg' ? FONT_SIZE.xl :
@@ -61,10 +62,10 @@ interface StarRowProps {
 }
 
 export function StarRow({
-  windingScore,
-  sceneryScore,
-  trafficScore,
-  difficultyScore,
+  windingScore = 0,
+  sceneryScore = 0,
+  trafficScore = 0,
+  difficultyScore = 0,
 }: StarRowProps) {
   const items = [
     { label: 'ワインディング', score: windingScore, icon: '〜' },

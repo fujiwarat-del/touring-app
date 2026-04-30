@@ -31,11 +31,12 @@
       },
       "package": "com.touringplanner.app",
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "CAMERA"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -48,9 +49,8 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0"
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
           },
           "ios": {
             "deploymentTarget": "15.1"
@@ -61,8 +61,9 @@
     "newArchEnabled": true,
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "6f42b314-24fe-4a7c-a369-c56bc68974e4"
       }
-    }
+    },
+    "owner": "wo_fuji"
   }
 }

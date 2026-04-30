@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as Location from 'expo-location';
+import { Linking, Alert } from 'react-native';
 
 export interface LocationState {
   lat: number | null;
@@ -23,10 +24,27 @@ export function useLocation() {
   });
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
+    const { status: existing } = await Location.getForegroundPermissionsAsync();
+    if (existing === 'granted') {
+      setState((prev) => ({ ...prev, permissionGranted: true }));
+      return true;
+    }
     const { status } = await Location.requestForegroundPermissionsAsync();
-    const granted = status === 'granted';
-    setState((prev) => ({ ...prev, permissionGranted: granted }));
-    return granted;
+    if (status === 'granted') {
+      setState((prev) => ({ ...prev, permissionGranted: true }));
+      return true;
+    }
+    // 権限が拒否された場合、設定画面へ誘導
+    Alert.alert(
+      '位置情報の権限が必要です',
+      'アプリの設定から「位置情報」を「このアプリの使用中のみ許可」に変更してください。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '設定を開く', onPress: () => Linking.openSettings() },
+      ]
+    );
+    setState((prev) => ({ ...prev, permissionGranted: false }));
+    return false;
   }, []);
 
   const fetchLocation = useCallback(async () => {
@@ -77,11 +95,14 @@ export function useLocation() {
         error: null,
         permissionGranted: true,
       });
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.code === 'E_LOCATION_SERVICES_DISABLED'
+        ? 'デバイスの位置情報サービスがオフです。設定からONにしてください。'
+        : '位置情報の取得に失敗しました。しばらく後に再試行してください。';
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: '位置情報の取得に失敗しました',
+        error: msg,
       }));
     }
   }, [requestPermission]);

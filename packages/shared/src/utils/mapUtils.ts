@@ -47,7 +47,6 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     `origin=${encodeURIComponent(origin)}`,
     `destination=${encodeURIComponent(destStr)}`,
     `travelmode=driving`,
-    `dir_action=navigate`,
   ];
   if (encodedWaypoints) {
     parts.push(`waypoints=${encodedWaypoints}`);

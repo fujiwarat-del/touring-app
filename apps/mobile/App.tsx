@@ -1,5 +1,6 @@
 import React, { Component, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { savePushToken } from './src/services/firebase';
 
@@ -60,6 +61,8 @@ const Stack = createStackNavigator<RootStackParamList>();
 const Tab   = createBottomTabNavigator<HomeTabParamList>();
 
 function HomeTabs() {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 56 + insets.bottom;
   return (
     <Tab.Navigator
       screenOptions={{
@@ -70,8 +73,9 @@ function HomeTabs() {
           backgroundColor: '#fff',
           borderTopColor: '#e5e7eb',
           borderTopWidth: 1,
-          paddingBottom: 4,
-          height: 60,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
+          paddingTop: 4,
+          height: tabBarHeight,
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -181,6 +185,7 @@ export default function App() {
   }, []);
 
   return (
+    <SafeAreaProvider>
     <AppErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <NavigationContainer>
@@ -235,5 +240,6 @@ export default function App() {
         </NavigationContainer>
       </GestureHandlerRootView>
     </AppErrorBoundary>
+    </SafeAreaProvider>
   );
 }
