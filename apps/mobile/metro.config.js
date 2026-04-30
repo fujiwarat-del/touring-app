@@ -6,8 +6,8 @@ const monorepoRoot = path.resolve(projectRoot, '../..');
 
 const config = getDefaultConfig(projectRoot);
 
-// モノレポ全体を監視対象に追加
-config.watchFolders = [monorepoRoot];
+// モノレポ全体を監視対象に追加（既存のdefaultに追記）
+config.watchFolders = [...(config.watchFolders ?? []), monorepoRoot];
 
 // node_modules の解決順序
 config.resolver.nodeModulesPaths = [

@@ -48,6 +48,10 @@
   "devDependencies": {
     "typescript": "^5.3.3"
   },
+  "resolutions": {
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
   "engines": {
     "node": ">=18.0.0",
     "yarn": ">=1.22.0"
