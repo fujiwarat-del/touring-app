@@ -9,6 +9,58 @@ import {
 } from '../shared/googleMapsTraffic';
 
 // ──────────────────────────────────────────────
+// 座標が日本の陸地エリア内か粗く判定する
+// 海上・架空座標（ゼロ埋め等）を除外するための簡易チェック
+// ──────────────────────────────────────────────
+function isCoordinateOnJapanLand(lat: number, lng: number): boolean {
+  // ゼロ埋め架空座標チェック（例: 35.5000000 / 140.0000000）
+  const latStr = lat.toFixed(7);
+  const lngStr = lng.toFixed(7);
+  const latTrail = latStr.replace(/.*\./, '');
+  const lngTrail = lngStr.replace(/.*\./, '');
+  if (latTrail.endsWith('0000') && lngTrail.endsWith('0000')) {
+    console.warn(`[CoordCheck] Suspicious padded-zero coordinate: (${lat}, ${lng}) — discarding`);
+    return false;
+  }
+
+  // 日本の主要陸地（粗いバウンディングボックス）
+  // 複数領域の OR で判定
+  const regions = [
+    // 沖縄・先島
+    [24.0, 28.5, 122.9, 131.5],
+    // 奄美・トカラ
+    [27.0, 30.5, 129.0, 130.5],
+    // 九州
+    [30.9, 34.2, 129.0, 132.0],
+    // 対馬・壱岐
+    [33.9, 34.8, 129.1, 129.8],
+    // 四国
+    [32.5, 34.3, 132.0, 134.9],
+    // 中国・近畿西部（山陰含む）
+    [33.0, 36.5, 130.5, 136.5],
+    // 近畿・東海・関東（中部含む）
+    [34.0, 37.0, 135.0, 141.2],
+    // 東北（太平洋側）
+    [36.0, 41.6, 139.5, 142.0],
+    // 東北（日本海側）
+    [37.0, 41.6, 138.5, 141.5],
+    // 北海道
+    [41.2, 45.6, 139.5, 146.1],
+    // 伊豆・小笠原（粗め）
+    [26.0, 35.0, 139.5, 142.5],
+  ] as const;
+
+  for (const [minLat, maxLat, minLng, maxLng] of regions) {
+    if (lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng) {
+      return true;
+    }
+  }
+
+  console.warn(`[CoordCheck] Coordinate (${lat}, ${lng}) appears to be outside Japan land — discarding`);
+  return false;
+}
+
+// ──────────────────────────────────────────────
 // Haversine 距離計算（km）
 // ──────────────────────────────────────────────
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -337,6 +389,13 @@ export default async function handler(
           wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
           // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
           wps = removeMajorDetours(wps);
+          // 海上・架空座標を除去（出発地=実GPS座標は除外対象外）
+          wps = wps.filter((wp, idx) => {
+            if (idx === 0) return true; // 出発地は実GPS座標なので除外しない
+            const valid = isCoordinateOnJapanLand(wp.lat, wp.lng);
+            if (!valid) console.warn(`[Route] Removed invalid coord waypoint: ${wp.name ?? '?'} (${wp.lat}, ${wp.lng})`);
+            return valid;
+          });
           // For same-road return, force last waypoint to match start
           if (routeRequest.returnType === 'same' && wps.length > 1) {
             wps[wps.length - 1] = {

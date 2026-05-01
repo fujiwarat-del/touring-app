@@ -43,19 +43,20 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     : waypoints.slice(0, -1)
   ).slice(0, 8);
 
-  const encodedWaypoints = intermediateWps
-    .map((wp) => encodeURIComponent(`${wp.lat},${wp.lng}`))
-    .join('%7C');
+  // 座標はカンマ・パイプをそのまま使用（encodeURIComponentすると%2Cになりgoogle mapsが座標として認識できない）
+  const waypointsStr = intermediateWps
+    .map((wp) => `${wp.lat},${wp.lng}`)
+    .join('|');
 
   const base = 'https://www.google.com/maps/dir/';
   const parts = [
     'api=1',
-    `origin=${encodeURIComponent(origin)}`,
-    `destination=${encodeURIComponent(destStr)}`,
+    `origin=${origin}`,
+    `destination=${destStr}`,
     'travelmode=driving',
   ];
-  if (encodedWaypoints) {
-    parts.push(`waypoints=${encodedWaypoints}`);
+  if (waypointsStr) {
+    parts.push(`waypoints=${waypointsStr}`);
   }
 
   return `${base}?${parts.join('&')}`;
