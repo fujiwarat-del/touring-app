@@ -6,16 +6,19 @@ import type { WaypointObject, Route } from '../types/index';
 
 /**
  * Build a Google Maps URL with waypoints
- * 経由地・目的地は必ず座標（lat,lng）で渡す。
- * 地点名はAIが生成した造語（例：「成田空港南側河川敷」）の場合、
- * Google Mapsが地点を見つけられず正しいルートが開かれないため。
- * 座標は常に正確にルーティングされる。
+ *
+ * 【URLフォーマットの選択理由】
+ * - `maps/dir/?api=1&travelmode=driving` は前回使用した交通手段を引き継ぐことがある
+ * - `maps.google.com/maps?dirflg=d` は「d=driving」を強制指定できるため徒歩モードになりにくい
+ * - 座標（lat,lng）使用で AI 造語の地点名が見つからない問題を回避
+ *
+ * フォーマット: https://maps.google.com/maps?saddr=lat,lng&daddr=lat,lng+to:lat,lng&dirflg=d
  */
 export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
   const waypoints = route.waypointObjects;
 
   if (!waypoints || waypoints.length === 0) {
-    if (startLat && startLng) {
+    if (startLat != null && startLng != null) {
       return `https://www.google.com/maps/search/?api=1&query=${startLat},${startLng}`;
     }
     return 'https://www.google.com/maps';
@@ -31,32 +34,25 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
-  // 目的地：座標を使用（地点名だとAI造語が見つからない場合がある）
+  // 目的地：最後の経由地
   const destination = waypoints[waypoints.length - 1];
-  const destStr = `${destination.lat},${destination.lng}`;
+  const destCoord = `${destination.lat},${destination.lng}`;
 
-  // 中間経由地：座標で渡す（最大8か所）
+  // 中間経由地（最大8か所）
   const intermediateWps = (startLat != null && startLng != null
     ? waypoints.slice(1, -1)
     : waypoints.slice(0, -1)
   ).slice(0, 8);
 
-  const encodedWaypoints = intermediateWps
-    .map((wp) => encodeURIComponent(`${wp.lat},${wp.lng}`))
-    .join('%7C');
-
-  const base = 'https://www.google.com/maps/dir/';
-  const parts = [
-    'api=1',
-    `origin=${encodeURIComponent(origin)}`,
-    `destination=${encodeURIComponent(destStr)}`,
-    `travelmode=driving`,
+  // daddr = 中間経由地 + 目的地 を "+to:" で結合
+  // dirflg=d で車（ドライブ）モードを強制指定
+  const allDests = [
+    ...intermediateWps.map((wp) => `${wp.lat},${wp.lng}`),
+    destCoord,
   ];
-  if (encodedWaypoints) {
-    parts.push(`waypoints=${encodedWaypoints}`);
-  }
+  const daddr = allDests.join('+to:');
 
-  return `${base}?${parts.join('&')}`;
+  return `https://maps.google.com/maps?saddr=${encodeURIComponent(origin)}&daddr=${daddr}&dirflg=d`;
 }
 
 /**
