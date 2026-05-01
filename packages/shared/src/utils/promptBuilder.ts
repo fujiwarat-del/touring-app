@@ -80,10 +80,12 @@ export function buildPrompt(req: GenerateRouteRequest): string {
     ? `現在の天気: ${weatherInfo.weatherDescription} ${weatherInfo.icon}, 気温: ${weatherInfo.temperature}°C, 風速: ${weatherInfo.windSpeed}km/h, 降水: ${weatherInfo.precipitation}mm`
     : '';
 
-  // 経由地間の最大距離を計算
-  const maxLegsCount = 5;
+  // 経由地間の距離計算
+  const maxLegsCount = 6;
   const maxPerLegKm = Math.round(maxDistanceKm / maxLegsCount);
+  const minPerLegKm = Math.max(5, Math.round(maxDistanceKm / 12));
   const maxRadiusKm = Math.round(maxDistanceKm / 2);
+  const minDistanceKm = Math.round(maxDistanceKm * 0.9);
 
   const prompt = `あなたはバイクツーリングの専門家AIです。以下の条件で日本国内のバイクツーリングルートを3つ提案してください。
 
@@ -96,19 +98,33 @@ ${locationStr}
 - 走行スタイル: ${preferences.join('、')}
 - プランニングモード: ${isDistanceMode ? `📍 距離指定（目標 ${targetDistanceKm}km）` : `⏱️ 時間指定（${durationStr}）`}
 ${isDistanceMode
-  ? `- 走行距離の目標: **${targetDistanceKm}km**（±10%以内 = ${distanceGuide}に収めること）\n- 所要時間: AIが最適な時間で計算すること（distanceに合わせた自然な時間を設定）`
+  ? `- 走行距離の目標: **${targetDistanceKm}km**（許容範囲: ${distanceGuide}、この範囲外は絶対NG）\n- 所要時間: distanceに合わせてAIが現実的な時間を計算すること`
   : `- 所要時間: ${durationStr}（厳守）\n- 適切な距離の目安: ${distanceGuide}（この範囲内に収めること）`}
 - ルートモード: ${modeStr}
 - ${returnStr}
 - ${roadStr}
+${isDistanceMode ? `
+## ❗❗❗【最重要・距離必達】走行距離 ${targetDistanceKm}km を達成すること ❗❗❗
+以下の条件をすべて満たさないルートは絶対に提案しないこと：
 
+1. **最低走行距離**: 実走行距離が必ず **${minDistanceKm}km以上** であること
+   → ${minDistanceKm}km未満のルートは条件違反。絶対にNG。
+2. **目標走行距離**: 実走行距離が **${distanceGuide}** の範囲内であること
+3. **行動半径**: 出発地から最も遠い経由地まで直線距離で **${Math.round(maxRadiusKm * 0.4)}km〜${maxRadiusKm}km** 離れていること
+   → ${targetDistanceKm}kmを走るには、出発地から${Math.round(maxRadiusKm * 0.4)}km以上離れた場所まで必ず足を延ばすこと
+4. **経由地間距離**: 隣接する経由地の直線距離が **${minPerLegKm}km〜${maxPerLegKm}km** の範囲内
+   → ${minPerLegKm}km未満の近すぎる経由地は距離を稼げないため禁止
+5. **3ルートは異なる方向**: 各ルートが別々の方角へ広がること（北・南・東・西・斜めなど）
+
+【チェックリスト】提案前に各ルートの走行距離を必ず暗算で確認せよ：
+- waypointObjects の全区間の距離合計（道路係数1.3〜1.5倍）が ${minDistanceKm}km〜${Math.round(maxDistanceKm * 1.1)}km になっているか？
+- 最遠経由地は出発地から直線${Math.round(maxRadiusKm * 0.4)}km以上離れているか？
+- 各経由地間が${minPerLegKm}km以上離れているか？` : `
 ## 【最重要】経由地の距離制約（必ず守ること）
-- 出発地から半径 **${maxRadiusKm}km以内** の地点のみ経由地・目的地に設定すること（例: 半径${maxRadiusKm}kmを超える場所は絶対NG）
-- 隣接する経由地同士の **直線距離は最大${maxPerLegKm}km以内** にすること
+- 出発地から半径 **${maxRadiusKm}km以内** の地点のみ経由地・目的地に設定すること
+- 隣接する経由地同士の直線距離は **${minPerLegKm}km〜${maxPerLegKm}km** の範囲内にすること
 - 全経由地をGoogle Mapsで繋いだ実際の走行距離が **${distanceGuide}** に収まること
-- この制約を守れないルートは提案しないこと
-- ❗ 所要時間${durationStr}・距離目安${distanceGuide}のルートで、半径${maxRadiusKm}km以上離れた場所（例: 箱根・伊豆・房総・多摩山地など）は絶対に使わないこと
-- ❗ 3ルートはそれぞれ **異なる方向・異なる経由地** にすること（同じ目的地・経由地を使い回さないこと）
+- ❗ 3ルートはそれぞれ **異なる方向・異なる経由地** にすること（同じ目的地・経由地を使い回さないこと）`}
 
 ## 本日の状況
 - 日付: ${todayInfo.dateStr}
@@ -169,8 +185,12 @@ ${weatherStr ? `- ${weatherStr}` : ''}
 6. 3ルートはそれぞれ異なるキャラクター（難易度・方向・テーマ）を持たせること
 7. 出発地点から実際に行ける現実的なルートのみを提案すること
 ${isDistanceMode
-  ? `8. distanceフィールドは必ず「${distanceGuide}」の範囲内に収めること（目標 ${targetDistanceKm}km ± 10%）。この距離から大きく外れるルートは絶対に提案しないこと
-9. timeフィールドはGoogle Mapsの経路案内で表示される所要時間に近い現実的な値を記載すること。道路種別ごとの目安速度：【峠・ワインディング・山岳道路】平均20〜25km/h、【山間の一般道・県道】平均25〜35km/h、【平地の国道・幹線道路】平均35〜45km/h、【高速道路】平均80km/h`
+  ? `8. 【距離必達】distanceフィールドは必ず **${distanceGuide}** の範囲内に収めること。
+   - ✅ OK例: 「約${Math.round(maxDistanceKm * 0.95)}km」「約${targetDistanceKm}km」「約${Math.round(maxDistanceKm * 1.05)}km」
+   - ❌ NG例: 「約${Math.round(maxDistanceKm * 0.4)}km」「約${Math.round(maxDistanceKm * 0.5)}km」（目標の半分以下は条件違反）
+   - waypointObjectsの全区間を合計してdistanceが${minDistanceKm}km以上になっているか必ず確認してから出力すること
+9. timeフィールドは走行距離${targetDistanceKm}kmに見合った現実的な時間を記載すること。
+   道路種別ごとの目安速度：【峠・ワインディング・山岳道路】平均20〜25km/h、【山間の一般道・県道】平均25〜35km/h、【平地の国道・幹線道路】平均35〜45km/h、【高速道路】平均80km/h`
   : `8. distanceフィールドは必ず「適切な距離の目安: ${distanceGuide}」の範囲内に収めること。この距離を大幅に超えるルートは所要時間内に走り切れないため絶対に提案しないこと
 9. timeフィールドはGoogle Mapsの経路案内で表示される所要時間に近い現実的な値を記載すること。道路種別ごとの目安速度：【峠・ワインディング・山岳道路】平均20〜25km/h、【山間の一般道・県道】平均25〜35km/h、【平地の国道・幹線道路】平均35〜45km/h、【高速道路】平均80km/h。ユーザーが指定した所要時間「${durationStr}」と大きくズレないこと`}
 10. 【バイクアクセス厳守】以下の場所は絶対に経由地・目的地に含めないこと：
