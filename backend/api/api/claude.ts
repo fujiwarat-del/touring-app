@@ -23,6 +23,40 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 /**
+ * 大きな寄り道になる中間経由地を除去する
+ * prev→curr→next の距離が prev→next の直線距離の maxDetourFactor 倍を超える場合は除去
+ * 例: B が全然違う方向にあり、A→B→C が A→C の 2 倍以上なら B を削除
+ */
+function removeMajorDetours(
+  waypoints: { lat: number; lng: number; [key: string]: any }[],
+  maxDetourFactor = 2.0
+): typeof waypoints {
+  if (waypoints.length <= 2) return waypoints;
+
+  const result: typeof waypoints = [waypoints[0]];
+
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = waypoints[i];
+    const next = waypoints[i + 1];
+
+    const directDist = haversineKm(prev.lat, prev.lng, next.lat, next.lng);
+    const viaDist =
+      haversineKm(prev.lat, prev.lng, curr.lat, curr.lng) +
+      haversineKm(curr.lat, curr.lng, next.lat, next.lng);
+
+    // 直線距離がほぼ0（prev と next が同一地点）の場合は通す
+    if (directDist < 1 || viaDist / directDist <= maxDetourFactor) {
+      result.push(curr);
+    }
+    // else: この経由地は大きな寄り道なのでスキップ
+  }
+
+  result.push(waypoints[waypoints.length - 1]);
+  return result;
+}
+
+/**
  * 出発地から遠すぎる経由地・目的地を除去し、現実的なルートに絞り込む
  * - 全経由地（目的地含む）を maxRadiusKm でフィルタリング
  * - 直線合計距離が maxTotalKm を超えた時点で打ち切る
@@ -301,6 +335,8 @@ export default async function handler(
             : Math.round((routeRequest.duration / 60) * avgSpeed);
           const maxRadiusKm = Math.round(maxDistKm / 2);
           wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
+          // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
+          wps = removeMajorDetours(wps);
           // For same-road return, force last waypoint to match start
           if (routeRequest.returnType === 'same' && wps.length > 1) {
             wps[wps.length - 1] = {
