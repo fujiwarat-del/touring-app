@@ -21,8 +21,7 @@ function wpToString(wp: WaypointObject): string {
  * 【設計方針】
  * - 出発地はGPS座標（常に正確）を使用
  * - 経由地・目的地は地点名を使用（座標だと海上に落ちる問題を回避）
- * - dir_action=navigate で強制ナビ開始（ドライブモード固定）
- * - travelmode=driving も併用してモード固定を二重に担保
+ * - travelmode=driving でドライブモード指定
  */
 export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
   const waypoints = route.waypointObjects;
@@ -65,7 +64,6 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     `origin=${encodeURIComponent(origin)}`,
     `destination=${encodeURIComponent(destStr)}`,
     'travelmode=driving',
-    'dir_action=navigate',   // 強制ナビ開始 → ドライブモード固定
   ];
   if (encodedWaypoints) {
     parts.push(`waypoints=${encodedWaypoints}`);
