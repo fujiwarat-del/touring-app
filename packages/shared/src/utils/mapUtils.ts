@@ -5,14 +5,24 @@
 import type { WaypointObject, Route } from '../types/index';
 
 /**
+ * 経由地を「地点名」で表現する
+ * 名前がある場合は名前を使い、ない場合のみ座標にフォールバック
+ */
+function wpToString(wp: WaypointObject): string {
+  if (wp.name && wp.name.trim().length > 0) {
+    return wp.name.trim();
+  }
+  return `${wp.lat},${wp.lng}`;
+}
+
+/**
  * Build a Google Maps URL with waypoints
  *
- * 【URLフォーマットの選択理由】
- * - `maps/dir/?api=1&travelmode=driving` は前回使用した交通手段を引き継ぐことがある
- * - `maps.google.com/maps?dirflg=d` は「d=driving」を強制指定できるため徒歩モードになりにくい
- * - 座標（lat,lng）使用で AI 造語の地点名が見つからない問題を回避
- *
- * フォーマット: https://maps.google.com/maps?saddr=lat,lng&daddr=lat,lng+to:lat,lng&dirflg=d
+ * 【設計方針】
+ * - 出発地はGPS座標（常に正確）を使用
+ * - 経由地・目的地は地点名を使用（座標だと海上に落ちる問題を回避）
+ * - dir_action=navigate で強制ナビ開始（ドライブモード固定）
+ * - travelmode=driving も併用してモード固定を二重に担保
  */
 export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
   const waypoints = route.waypointObjects;
@@ -26,33 +36,42 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
 
   if (waypoints.length === 1) {
     const wp = waypoints[0];
-    return `https://www.google.com/maps/search/?api=1&query=${wp.lat},${wp.lng}`;
+    const q = wp.name ? encodeURIComponent(wp.name) : `${wp.lat},${wp.lng}`;
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
   }
 
-  // 出発地：GPS座標（実際の現在地）を優先、なければ最初の経由地座標
+  // 出発地：GPS座標（実際の現在地）を優先 ← 座標は常に正確
   const origin = (startLat != null && startLng != null)
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
-  // 目的地：最後の経由地
+  // 目的地：地点名を使用（AI造語でもGoogle Mapsが近似地点を探す）
   const destination = waypoints[waypoints.length - 1];
-  const destCoord = `${destination.lat},${destination.lng}`;
+  const destStr = wpToString(destination);
 
-  // 中間経由地（最大8か所）
+  // 中間経由地：地点名を使用（最大8か所）
   const intermediateWps = (startLat != null && startLng != null
     ? waypoints.slice(1, -1)
     : waypoints.slice(0, -1)
   ).slice(0, 8);
 
-  // daddr = 中間経由地 + 目的地 を "+to:" で結合
-  // dirflg=d で車（ドライブ）モードを強制指定
-  const allDests = [
-    ...intermediateWps.map((wp) => `${wp.lat},${wp.lng}`),
-    destCoord,
-  ];
-  const daddr = allDests.join('+to:');
+  const encodedWaypoints = intermediateWps
+    .map((wp) => encodeURIComponent(wpToString(wp)))
+    .join('%7C');
 
-  return `https://maps.google.com/maps?saddr=${encodeURIComponent(origin)}&daddr=${daddr}&dirflg=d`;
+  const base = 'https://www.google.com/maps/dir/';
+  const parts = [
+    'api=1',
+    `origin=${encodeURIComponent(origin)}`,
+    `destination=${encodeURIComponent(destStr)}`,
+    'travelmode=driving',
+    'dir_action=navigate',   // 強制ナビ開始 → ドライブモード固定
+  ];
+  if (encodedWaypoints) {
+    parts.push(`waypoints=${encodedWaypoints}`);
+  }
+
+  return `${base}?${parts.join('&')}`;
 }
 
 /**
