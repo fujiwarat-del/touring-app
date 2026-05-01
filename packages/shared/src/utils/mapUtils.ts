@@ -5,23 +5,13 @@
 import type { WaypointObject, Route } from '../types/index';
 
 /**
- * 経由地を「地点名」で表現する
- * 名前がある場合は名前を使い、ない場合のみ座標にフォールバック
- */
-function wpToString(wp: WaypointObject): string {
-  if (wp.name && wp.name.trim().length > 0) {
-    return wp.name.trim();
-  }
-  return `${wp.lat},${wp.lng}`;
-}
-
-/**
  * Build a Google Maps URL with waypoints
  *
- * 【設計方針】
- * - 出発地はGPS座標（常に正確）を使用
- * - 経由地・目的地は地点名を使用（座標だと海上に落ちる問題を回避）
- * - travelmode=driving でドライブモード指定
+ * 【設計方針】全経由地を座標指定で統一
+ * - 地点名はAI造語の場合「見つからない」「全然違う場所を見つける」問題が起きる
+ * - 座標は常に正確にルーティングされる
+ * - プロンプトでゼロ埋め架空座標（35.5000000等）を禁止済みのため信頼できる
+ * - travelmode=driving でドライブモード固定
  */
 export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
   const waypoints = route.waypointObjects;
@@ -35,28 +25,26 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
 
   if (waypoints.length === 1) {
     const wp = waypoints[0];
-    const q = wp.name ? encodeURIComponent(wp.name) : `${wp.lat},${wp.lng}`;
-    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+    return `https://www.google.com/maps/search/?api=1&query=${wp.lat},${wp.lng}`;
   }
 
-  // 出発地：GPS座標（実際の現在地）を優先 ← 座標は常に正確
+  // 出発地：GPS座標（実際の現在地）を優先
   const origin = (startLat != null && startLng != null)
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
-  // 目的地：座標を使用（AI造語の地点名はGoogle Mapsが見つけられず
-  // ルートが途中で切れる原因になるため、座標で確実に届ける）
+  // 目的地：座標指定（AI造語では見つからない・違う場所を見つける問題を回避）
   const destination = waypoints[waypoints.length - 1];
   const destStr = `${destination.lat},${destination.lng}`;
 
-  // 中間経由地：地点名を使用（最大8か所）
+  // 中間経由地：座標指定・最大8か所
   const intermediateWps = (startLat != null && startLng != null
     ? waypoints.slice(1, -1)
     : waypoints.slice(0, -1)
   ).slice(0, 8);
 
   const encodedWaypoints = intermediateWps
-    .map((wp) => encodeURIComponent(wpToString(wp)))
+    .map((wp) => encodeURIComponent(`${wp.lat},${wp.lng}`))
     .join('%7C');
 
   const base = 'https://www.google.com/maps/dir/';
