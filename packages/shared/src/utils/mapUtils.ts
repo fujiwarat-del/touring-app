@@ -44,9 +44,10 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
-  // 目的地：地点名を使用（AI造語でもGoogle Mapsが近似地点を探す）
+  // 目的地：座標を使用（AI造語の地点名はGoogle Mapsが見つけられず
+  // ルートが途中で切れる原因になるため、座標で確実に届ける）
   const destination = waypoints[waypoints.length - 1];
-  const destStr = wpToString(destination);
+  const destStr = `${destination.lat},${destination.lng}`;
 
   // 中間経由地：地点名を使用（最大8か所）
   const intermediateWps = (startLat != null && startLng != null
