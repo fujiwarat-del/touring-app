@@ -23,42 +23,6 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 /**
- * 経由地を最近傍順（Greedy Nearest-Neighbor）で並べ替える
- * 出発地・目的地は固定し、中間経由地のみ並べ替えることで
- * Google Maps へ送る際のジグザグルートを防ぐ
- */
-function sortWaypointsGreedy(
-  waypoints: { lat: number; lng: number }[]
-): { lat: number; lng: number }[] {
-  if (waypoints.length <= 2) return waypoints;
-  const origin = waypoints[0];
-  const destination = waypoints[waypoints.length - 1];
-  const remaining = waypoints.slice(1, -1).map((wp, i) => ({ ...wp, _idx: i }));
-
-  const sorted: { lat: number; lng: number }[] = [origin];
-  let current = origin;
-
-  while (remaining.length > 0) {
-    let nearestIdx = 0;
-    let nearestDist = Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const d = haversineKm(current.lat, current.lng, remaining[i].lat, remaining[i].lng);
-      if (d < nearestDist) {
-        nearestDist = d;
-        nearestIdx = i;
-      }
-    }
-    const { _idx: _, ...wp } = remaining[nearestIdx] as any;
-    sorted.push(wp);
-    current = remaining[nearestIdx];
-    remaining.splice(nearestIdx, 1);
-  }
-
-  sorted.push(destination);
-  return sorted;
-}
-
-/**
  * 出発地から遠すぎる経由地・目的地を除去し、現実的なルートに絞り込む
  * - 全経由地（目的地含む）を maxRadiusKm でフィルタリング
  * - 直線合計距離が maxTotalKm を超えた時点で打ち切る
@@ -357,11 +321,10 @@ export default async function handler(
         const wps = route.waypointObjects;
         if (!wps || wps.length < 2) return route;
 
-        // 経由地を最近傍順に並び替えてGoogle Mapsへ送る（ジグザグ防止）
-        const sortedForTraffic = sortWaypointsGreedy(
+        // Claude が生成した順序のまま渡す（greedy sort はかえって非効率になるため削除）
+        const traffic = await getTrafficAwareRoute(
           wps.map((wp) => ({ lat: wp.lat, lng: wp.lng }))
         );
-        const traffic = await getTrafficAwareRoute(sortedForTraffic);
 
         if (!traffic) return route; // API未設定 or エラー → 元のまま
 
