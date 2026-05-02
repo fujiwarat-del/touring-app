@@ -66,6 +66,15 @@ export function buildPrompt(req: GenerateRouteRequest): string {
 ## 出発地点
 ${locationStr}
 
+## ❗❗❗【絶対厳守・最優先】行動半径制約 ❗❗❗
+出発地から **直線距離 ${maxRadiusKm}km以内** の地点のみ経由地・目的地に使用できます。
+この範囲を超えた経由地を設定すると、システムが自動削除して**ルートが崩壊**します。
+
+✅ OK: 出発地から直線 ${Math.round(maxRadiusKm * 0.4)}km〜${maxRadiusKm}km 以内の地点
+❌ NG: 出発地から直線 ${maxRadiusKm}km を超える地点（例: 渋谷から${maxRadiusKm}km超の場所）
+
+**出発地から各経由地の直線距離を必ず計算してから提案してください。**
+
 ## ツーリング条件
 - バイク種類: ${bikeType}
 - 目的: ${purposes.join('、')}
@@ -90,7 +99,8 @@ ${isDistanceMode ? `
    → ${minPerLegKm}km未満の近すぎる経由地は距離を稼げないため禁止
 5. **3ルートは異なる方向**: 各ルートが別々の方角へ広がること（北・南・東・西・斜めなど）
 
-【チェックリスト】提案前に各ルートの走行距離を必ず暗算で確認せよ：
+【チェックリスト】提案前に各ルートで以下を必ず確認せよ：
+- 全経由地が出発地から直線 **${maxRadiusKm}km以内** に収まっているか？ ← ❗最優先確認
 - waypointObjects の全区間の距離合計（道路係数1.3〜1.5倍）が ${minDistanceKm}km〜${Math.round(maxDistanceKm * 1.1)}km になっているか？
 - 最遠経由地は出発地から直線${Math.round(maxRadiusKm * 0.4)}km以上離れているか？
 - 各経由地間が${minPerLegKm}km以上離れているか？` : `

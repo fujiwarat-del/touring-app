@@ -369,56 +369,64 @@ export default async function handler(
     }
 
     // Validate and sanitize routes
-    const routes: Route[] = parsedData.routes
+    const routes: Route[] = (parsedData.routes
       .slice(0, 3) // Max 3 routes
-      .map((r: Partial<Route>) => ({
-        name: String(r.name ?? 'ルート'),
-        congestion: String(r.congestion ?? '中'),
-        distance: String(r.distance ?? '-'),
-        time: String(r.time ?? '-'),
-        difficulty: String(r.difficulty ?? '中級'),
-        windingScore: Math.min(5, Math.max(1, Number(r.windingScore) || 3)),
-        sceneryScore: Math.min(5, Math.max(1, Number(r.sceneryScore) || 3)),
-        trafficScore: Math.min(5, Math.max(1, Number(r.trafficScore) || 3)),
-        difficultyScore: Math.min(5, Math.max(1, Number(r.difficultyScore) || 3)),
-        type: String(r.type ?? 'ツーリング'),
-        description: String(r.description ?? ''),
-        caution: String(r.caution ?? ''),
-        waypointObjects: (() => {
-          let wps = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
-          // Override first waypoint coords with actual GPS to prevent drift
-          if (wps.length > 0) {
-            wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
-          }
-          // 出発地から遠すぎる経由地・目的地を除去
-          const avgSpeed = routeRequest.emptyRoadMode ? 28 : 55;
-          const isDistanceMode = routeRequest.planningMode === 'distance' && routeRequest.targetDistanceKm != null;
-          const maxDistKm = isDistanceMode
-            ? routeRequest.targetDistanceKm!
-            : Math.round((routeRequest.duration / 60) * avgSpeed);
-          const maxRadiusKm = Math.round(maxDistKm / 2);
-          wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
-          // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
-          wps = removeMajorDetours(wps);
-          // 海上・架空座標を除去（出発地=実GPS座標は除外対象外）
-          wps = wps.filter((wp, idx) => {
-            if (idx === 0) return true; // 出発地は実GPS座標なので除外しない
-            const valid = isCoordinateOnJapanLand(wp.lat, wp.lng);
-            if (!valid) console.warn(`[Route] Removed invalid coord waypoint: ${wp.name ?? '?'} (${wp.lat}, ${wp.lng})`);
-            return valid;
-          });
-          // For same-road return, force last waypoint to match start
-          if (routeRequest.returnType === 'same' && wps.length > 1) {
-            wps[wps.length - 1] = {
-              ...wps[0],
-              name: wps[0].name ?? '出発地点（帰着）',
-              type: 'destination' as const,
-            };
-          }
-          return wps;
-        })(),
-        highlightWaypoints: Array.isArray(r.highlightWaypoints) ? r.highlightWaypoints : [],
-      }));
+      .map((r: Partial<Route>): Route | null => {
+        // waypointObjects のフィルタ処理
+        let wps = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
+        // Override first waypoint coords with actual GPS to prevent drift
+        if (wps.length > 0) {
+          wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
+        }
+        // 出発地から遠すぎる経由地・目的地を除去
+        const avgSpeed = routeRequest.emptyRoadMode ? 28 : 55;
+        const isDistanceModeWp = routeRequest.planningMode === 'distance' && routeRequest.targetDistanceKm != null;
+        const maxDistKm = isDistanceModeWp
+          ? routeRequest.targetDistanceKm!
+          : Math.round((routeRequest.duration / 60) * avgSpeed);
+        const maxRadiusKm = Math.round(maxDistKm / 2);
+        wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
+        // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
+        wps = removeMajorDetours(wps);
+        // 海上・架空座標を除去（出発地=実GPS座標は除外対象外）
+        wps = wps.filter((wp, idx) => {
+          if (idx === 0) return true; // 出発地は実GPS座標なので除外しない
+          const valid = isCoordinateOnJapanLand(wp.lat, wp.lng);
+          if (!valid) console.warn(`[Route] Removed invalid coord waypoint: ${wp.name ?? '?'} (${wp.lat}, ${wp.lng})`);
+          return valid;
+        });
+        // フィルタ後に経由地が1点以下になった場合（出発地=目的地のような崩壊ルート）は除外
+        if (wps.length < 2) {
+          console.warn(`[Route] "${r.name}" — all waypoints filtered out (radius=${maxRadiusKm}km), skipping route`);
+          return null;
+        }
+        // For same-road return, force last waypoint to match start
+        if (routeRequest.returnType === 'same' && wps.length > 1) {
+          wps[wps.length - 1] = {
+            ...wps[0],
+            name: wps[0].name ?? '出発地点（帰着）',
+            type: 'destination' as const,
+          };
+        }
+
+        return {
+          name: String(r.name ?? 'ルート'),
+          congestion: String(r.congestion ?? '中'),
+          distance: String(r.distance ?? '-'),
+          time: String(r.time ?? '-'),
+          difficulty: String(r.difficulty ?? '中級'),
+          windingScore: Math.min(5, Math.max(1, Number(r.windingScore) || 3)),
+          sceneryScore: Math.min(5, Math.max(1, Number(r.sceneryScore) || 3)),
+          trafficScore: Math.min(5, Math.max(1, Number(r.trafficScore) || 3)),
+          difficultyScore: Math.min(5, Math.max(1, Number(r.difficultyScore) || 3)),
+          type: String(r.type ?? 'ツーリング'),
+          description: String(r.description ?? ''),
+          caution: String(r.caution ?? ''),
+          waypointObjects: wps,
+          highlightWaypoints: Array.isArray(r.highlightWaypoints) ? r.highlightWaypoints : [],
+        };
+      })
+      .filter((r): r is Route => r !== null));
 
     // ── Google Maps でリアルタイム渋滞情報を付加 ──────────────
     // API キーが設定されている場合のみ実行（設定なしでも動作する）
