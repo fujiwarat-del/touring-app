@@ -61,6 +61,14 @@ export function buildPrompt(req: GenerateRouteRequest): string {
   const maxRadiusKm = Math.round(maxDistanceKm / 2);
   const minDistanceKm = Math.round(maxDistanceKm * 0.9); // 距離モード時の最低走行距離
 
+  // 行動半径の緯度・経度範囲（Claude が具体的に確認できるよう計算）
+  const latDeg = maxRadiusKm / 111.0;
+  const lngDeg = maxRadiusKm / (111.0 * Math.cos(lat * Math.PI / 180));
+  const minLat = (lat - latDeg).toFixed(2);
+  const maxLat = (lat + latDeg).toFixed(2);
+  const minLng = (lng - lngDeg).toFixed(2);
+  const maxLng = (lng + lngDeg).toFixed(2);
+
   return `あなたはバイクツーリングの専門家AIです。以下の条件で日本国内のバイクツーリングルートを3つ提案してください。
 
 ## 出発地点
@@ -70,10 +78,13 @@ ${locationStr}
 出発地から **直線距離 ${maxRadiusKm}km以内** の地点のみ経由地・目的地に使用できます。
 この範囲を超えた経由地を設定すると、システムが自動削除して**ルートが崩壊**します。
 
-✅ OK: 出発地から直線 ${Math.round(maxRadiusKm * 0.4)}km〜${maxRadiusKm}km 以内の地点
-❌ NG: 出発地から直線 ${maxRadiusKm}km を超える地点（例: 渋谷から${maxRadiusKm}km超の場所）
+✅ 使用可能な座標範囲:
+  緯度 ${minLat} 〜 ${maxLat}
+  経度 ${minLng} 〜 ${maxLng}
 
-**出発地から各経由地の直線距離を必ず計算してから提案してください。**
+❌ この範囲を**1つでも超えた**経由地はNG（システムが自動削除してルートが消える）
+
+**提案前に各経由地の緯度・経度がこの範囲内に収まっているか必ず確認してください。**
 
 ## ツーリング条件
 - バイク種類: ${bikeType}

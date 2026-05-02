@@ -395,9 +395,13 @@ export default async function handler(
           if (!valid) console.warn(`[Route] Removed invalid coord waypoint: ${wp.name ?? '?'} (${wp.lat}, ${wp.lng})`);
           return valid;
         });
-        // フィルタ後に経由地が1点以下になった場合（出発地=目的地のような崩壊ルート）は除外
+        // フィルタ後に経由地が2点以下 or 出発地≒着地（中間なし）は崩壊ルートとして除外
         if (wps.length < 2) {
-          console.warn(`[Route] "${r.name}" — all waypoints filtered out (radius=${maxRadiusKm}km), skipping route`);
+          console.warn(`[Route] "${r.name}" — no waypoints left, skipping`);
+          return null;
+        }
+        if (wps.length === 2 && haversineKm(wps[0].lat, wps[0].lng, wps[1].lat, wps[1].lng) < 10) {
+          console.warn(`[Route] "${r.name}" — start≈end with no intermediates (${haversineKm(wps[0].lat, wps[0].lng, wps[1].lat, wps[1].lng).toFixed(1)}km), skipping`);
           return null;
         }
         // For same-road return, force last waypoint to match start
