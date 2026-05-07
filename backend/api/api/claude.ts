@@ -525,8 +525,17 @@ export default async function handler(
       })
     );
 
+    // 距離の短い順に並び替え（"約200km" → 200 として数値比較）
+    const parseDistanceKm = (distStr: string): number => {
+      const m = distStr.replace(/[^0-9.]/g, '');
+      return m ? parseFloat(m) : 9999;
+    };
+    const sortedRoutes = [...enrichedRoutes].sort(
+      (a, b) => parseDistanceKm(a.distance) - parseDistanceKm(b.distance)
+    );
+
     res.status(200).json({
-      routes: enrichedRoutes,
+      routes: sortedRoutes,
       generatedAt: new Date().toISOString(),
     });
   } catch (err: unknown) {
