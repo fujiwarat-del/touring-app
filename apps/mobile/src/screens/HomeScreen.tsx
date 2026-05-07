@@ -112,17 +112,46 @@ export default function HomeScreen() {
     setManualLocationName(null);
     try {
       const query = encodeURIComponent(manualLocationText.trim());
-      const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&accept-language=ja&countrycodes=jp`;
-      const res = await fetch(url, {
+
+      // ── 1. Nominatim（ランドマーク・地名に強い）──
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&accept-language=ja&countrycodes=jp`;
+      const nominatimRes = await fetch(nominatimUrl, {
         headers: { 'User-Agent': 'TouringPlannerApp/1.0' },
       });
-      if (!res.ok) throw new Error('network error');
-      const data = await res.json();
-      if (data.length > 0) {
-        setGeocodeCandidates(data);
+      const nominatimData = nominatimRes.ok ? await nominatimRes.json() : [];
+
+      let candidates: GeocodeCandidate[] = nominatimData;
+
+      // ── 2. Nominatim が0件 → Yahoo ジオコーダーAPI（番地まで対応）──
+      if (candidates.length === 0) {
+        const yahooClientId = process.env.EXPO_PUBLIC_YAHOO_CLIENT_ID;
+        if (yahooClientId) {
+          const yahooUrl = `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${yahooClientId}&query=${query}&output=json&results=5`;
+          const yahooRes = await fetch(yahooUrl);
+          if (yahooRes.ok) {
+            const yahooData = await yahooRes.json();
+            const features = yahooData?.Feature ?? [];
+            // Yahoo は座標を "lng,lat" 形式で返すので変換
+            candidates = features.map((f: any) => {
+              const [lngStr, latStr] = (f.Geometry?.Coordinates ?? '0,0').split(',');
+              const address = f.Property?.Address ?? f.Name ?? '';
+              return {
+                lat: latStr,
+                lon: lngStr,
+                display_name: address,
+                type: 'address',
+                class: 'place',
+              } as GeocodeCandidate;
+            }).filter((c: GeocodeCandidate) => c.lat && c.lon);
+          }
+        }
+      }
+
+      if (candidates.length > 0) {
+        setGeocodeCandidates(candidates);
         // 候補が1件だけなら自動選択
-        if (data.length === 1) {
-          const c = data[0];
+        if (candidates.length === 1) {
+          const c = candidates[0];
           setSelectedCandidateIdx(0);
           setManualLat(parseFloat(c.lat));
           setManualLng(parseFloat(c.lon));
@@ -130,7 +159,10 @@ export default function HomeScreen() {
           setManualLocationName(parts.slice(0, 2).join(' ') || manualLocationText.trim());
         }
       } else {
-        Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください（例: 箱根、静岡市）');
+        Alert.alert(
+          '場所が見つかりませんでした',
+          '別のキーワードで試してください\n例: 箱根、静岡市、東京都新宿区歌舞伎町1丁目'
+        );
       }
     } catch {
       Alert.alert('エラー', 'ネットワークエラーが発生しました。通信状態を確認してください。');
@@ -323,7 +355,7 @@ export default function HomeScreen() {
               <View style={styles.manualInputRow}>
                 <TextInput
                   style={styles.manualInput}
-                  placeholder="例: 箱根、静岡市、東京都新宿区"
+                  placeholder="例: 箱根、静岡市、千葉県市原市東国分寺台4丁目"
                   placeholderTextColor={COLORS.textMuted}
                   value={manualLocationText}
                   onChangeText={(t) => {
