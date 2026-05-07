@@ -76,6 +76,68 @@ function isCoordinateOnJapanLand(lat: number, lng: number): boolean {
 }
 
 // ──────────────────────────────────────────────
+// 経由地の訪問順序を最適化（2-opt 法）
+// 出発地・着地固定、中間経由地の順序を最短距離になるよう並び替える
+// ──────────────────────────────────────────────
+function optimizeWaypointOrder<T extends { lat: number; lng: number }>(waypoints: T[]): T[] {
+  if (waypoints.length <= 3) return waypoints; // 中間経由地0〜1点は最適化不要
+
+  const origin = waypoints[0];
+  const dest = waypoints[waypoints.length - 1];
+  let intermediates = waypoints.slice(1, -1);
+
+  if (intermediates.length <= 1) return waypoints;
+
+  // ── Step1: 最近傍法で初期順序を作成 ──
+  const visited = new Array(intermediates.length).fill(false);
+  const ordered: T[] = [];
+  let current: { lat: number; lng: number } = origin;
+
+  for (let i = 0; i < intermediates.length; i++) {
+    let nearestIdx = -1;
+    let nearestDist = Infinity;
+    for (let j = 0; j < intermediates.length; j++) {
+      if (visited[j]) continue;
+      const d = haversineKm(current.lat, current.lng, intermediates[j].lat, intermediates[j].lng);
+      if (d < nearestDist) { nearestDist = d; nearestIdx = j; }
+    }
+    visited[nearestIdx] = true;
+    ordered.push(intermediates[nearestIdx]);
+    current = intermediates[nearestIdx];
+  }
+  intermediates = ordered;
+
+  // ── Step2: 2-opt 改善 ──
+  const totalDist = (arr: T[]) => {
+    let d = haversineKm(origin.lat, origin.lng, arr[0].lat, arr[0].lng);
+    for (let i = 0; i < arr.length - 1; i++) {
+      d += haversineKm(arr[i].lat, arr[i].lng, arr[i + 1].lat, arr[i + 1].lng);
+    }
+    d += haversineKm(arr[arr.length - 1].lat, arr[arr.length - 1].lng, dest.lat, dest.lng);
+    return d;
+  };
+
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < intermediates.length - 1; i++) {
+      for (let j = i + 1; j < intermediates.length; j++) {
+        const before = totalDist(intermediates);
+        // i〜j の区間を逆順に
+        const next = [...intermediates];
+        next.splice(i, j - i + 1, ...intermediates.slice(i, j + 1).reverse());
+        if (totalDist(next) < before - 0.1) {
+          intermediates = next;
+          improved = true;
+        }
+      }
+    }
+  }
+
+  return [origin, ...intermediates, dest];
+}
+
+// ──────────────────────────────────────────────
 // Haversine 距離計算（km）
 // ──────────────────────────────────────────────
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -397,6 +459,8 @@ export default async function handler(
         wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
         // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
         wps = removeMajorDetours(wps);
+        // 経由地の訪問順序を最適化（2-opt法で最短距離順に並び替え）
+        wps = optimizeWaypointOrder(wps);
         // 海上・架空座標を除去（出発地=実GPS座標は除外対象外）
         wps = wps.filter((wp, idx) => {
           if (idx === 0) return true; // 出発地は実GPS座標なので除外しない
