@@ -43,10 +43,12 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
     : waypoints.slice(0, -1)
   ).slice(0, 8);
 
-  // 座標はカンマ・パイプをそのまま使用（encodeURIComponentすると%2Cになりgoogle mapsが座標として認識できない）
+  // カンマはそのまま（%2Cにするとgoogle mapsが座標として認識できない）
+  // パイプは%7Cにエンコード（Androidのintentシステムで生の|が切り詰められる問題を回避）
+  // Google Maps URL APIは%7Cを公式サポート
   const waypointsStr = intermediateWps
     .map((wp) => `${wp.lat},${wp.lng}`)
-    .join('|');
+    .join('%7C');
 
   const base = 'https://www.google.com/maps/dir/';
   const parts = [
