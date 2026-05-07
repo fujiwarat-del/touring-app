@@ -4,6 +4,7 @@ export function buildPrompt(req: GenerateRouteRequest): string {
   const {
     lat, lng, locationName, bikeType, purposes, preferences,
     duration, routeMode, returnType, destination,
+    destinationLat, destinationLng,
     emptyRoadMode, todayInfo, weatherInfo,
     planningMode = 'time', targetDistanceKm,
   } = req;
@@ -42,8 +43,11 @@ export function buildPrompt(req: GenerateRouteRequest): string {
     returnType === 'different' ? '帰り: 行きとは異なる別ルートで出発地に戻る（往路と復路で異なる道を使うこと）' :
     '帰り: 目的地そのまま（帰還なし）';
 
+  const destCoordStr = (destinationLat != null && destinationLng != null)
+    ? `（座標: ${destinationLat.toFixed(5)}, ${destinationLng.toFixed(5)}）`
+    : '';
   const modeStr = routeMode === 'destination' && destination
-    ? `目的地指定モード: ${destination}へ向かう`
+    ? `目的地指定モード: ${destination}${destCoordStr}へ向かう`
     : 'フリーモード: 出発地点から自由にルートを生成';
 
   const roadStr = emptyRoadMode

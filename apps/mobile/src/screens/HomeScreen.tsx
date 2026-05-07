@@ -60,6 +60,11 @@ export default function HomeScreen() {
   const [routeMode, setRouteMode] = useState<RouteMode>('free');
   const [returnType, setReturnType] = useState<ReturnType>('none');
   const [destination, setDestination] = useState('');
+  const [destLat, setDestLat] = useState<number | null>(null);
+  const [destLng, setDestLng] = useState<number | null>(null);
+  const [destGeocoding, setDestGeocoding] = useState(false);
+  const [destCandidates, setDestCandidates] = useState<GeocodeCandidate[]>([]);
+  const [destSelectedIdx, setDestSelectedIdx] = useState<number | null>(null);
   const [roadSearchMode, setRoadSearchMode] = useState<'normal' | 'empty'>('normal');
   const [planningMode, setPlanningMode] = useState<PlanningMode>('time');
   const [targetDistance, setTargetDistance] = useState(200); // km
@@ -187,6 +192,70 @@ export default function HomeScreen() {
     Linking.openURL(url);
   }, [manualLat, manualLng]);
 
+  // 目的地ジオコード（出発地と同じロジック）
+  const handleDestGeocode = useCallback(async () => {
+    if (!destination.trim()) return;
+    setDestGeocoding(true);
+    setDestCandidates([]);
+    setDestSelectedIdx(null);
+    setDestLat(null);
+    setDestLng(null);
+    try {
+      const query = encodeURIComponent(destination.trim());
+      const nominatimRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&accept-language=ja&countrycodes=jp`,
+        { headers: { 'User-Agent': 'TouringPlannerApp/1.0' } }
+      );
+      let candidates: GeocodeCandidate[] = nominatimRes.ok ? await nominatimRes.json() : [];
+
+      if (candidates.length === 0) {
+        const yahooClientId = process.env.EXPO_PUBLIC_YAHOO_CLIENT_ID;
+        if (yahooClientId) {
+          const yahooRes = await fetch(
+            `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${yahooClientId}&query=${query}&output=json&results=5`
+          );
+          if (yahooRes.ok) {
+            const yahooData = await yahooRes.json();
+            candidates = (yahooData?.Feature ?? []).map((f: any) => {
+              const [lngStr, latStr] = (f.Geometry?.Coordinates ?? '0,0').split(',');
+              return { lat: latStr, lon: lngStr, display_name: f.Property?.Address ?? f.Name ?? '', type: 'address', class: 'place' } as GeocodeCandidate;
+            }).filter((c: GeocodeCandidate) => c.lat && c.lon);
+          }
+        }
+      }
+
+      if (candidates.length > 0) {
+        setDestCandidates(candidates);
+        if (candidates.length === 1) {
+          setDestSelectedIdx(0);
+          setDestLat(parseFloat(candidates[0].lat));
+          setDestLng(parseFloat(candidates[0].lon));
+          const parts = candidates[0].display_name.split(',').map((s: string) => s.trim());
+          setDestination(parts.slice(0, 2).join(' ') || destination.trim());
+        }
+      } else {
+        Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください');
+      }
+    } catch {
+      Alert.alert('エラー', 'ネットワークエラーが発生しました。');
+    } finally {
+      setDestGeocoding(false);
+    }
+  }, [destination]);
+
+  const handleSelectDestCandidate = useCallback((idx: number, c: GeocodeCandidate) => {
+    setDestSelectedIdx(idx);
+    setDestLat(parseFloat(c.lat));
+    setDestLng(parseFloat(c.lon));
+    const parts = c.display_name.split(',').map((s: string) => s.trim());
+    setDestination(parts.slice(0, 2).join(' ') || c.display_name);
+  }, []);
+
+  const handleOpenDestMapConfirm = useCallback(() => {
+    if (destLat == null || destLng == null) return;
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${destLat},${destLng}`);
+  }, [destLat, destLng]);
+
   // 候補の表示名を整形（"地名（都道府県）"形式）
   const formatCandidateName = (display_name: string, type: string): { main: string; sub: string } => {
     const parts = display_name.split(',').map((s: string) => s.trim());
@@ -263,6 +332,8 @@ export default function HomeScreen() {
         routeMode,
         returnType,
         destination: destination.trim() || undefined,
+        destinationLat: (routeMode === 'destination' && destLat != null) ? destLat : undefined,
+        destinationLng: (routeMode === 'destination' && destLng != null) ? destLng : undefined,
         emptyRoadMode: roadSearchMode === 'empty',
         todayInfo,
         weatherInfo: weather ?? undefined,
@@ -549,13 +620,80 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
           {routeMode === 'destination' && (
-            <TextInput
-              style={styles.destinationInput}
-              placeholder="目的地を入力 (例: 箱根)"
-              placeholderTextColor={COLORS.textMuted}
-              value={destination}
-              onChangeText={setDestination}
-            />
+            <View style={{ marginTop: SPACING.md }}>
+              <View style={styles.manualInputRow}>
+                <TextInput
+                  style={styles.manualInput}
+                  placeholder="例: 箱根、静岡市、千葉県市原市東国分寺台4丁目"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={destination}
+                  onChangeText={(t) => {
+                    setDestination(t);
+                    if (destCandidates.length > 0) {
+                      setDestCandidates([]);
+                      setDestSelectedIdx(null);
+                      setDestLat(null);
+                      setDestLng(null);
+                    }
+                  }}
+                  onSubmitEditing={handleDestGeocode}
+                  returnKeyType="search"
+                />
+                <TouchableOpacity
+                  style={styles.geocodeBtn}
+                  onPress={handleDestGeocode}
+                  disabled={destGeocoding || !destination.trim()}
+                >
+                  {destGeocoding
+                    ? <ActivityIndicator size="small" color={COLORS.white} />
+                    : <Text style={styles.geocodeBtnText}>検索</Text>}
+                </TouchableOpacity>
+              </View>
+
+              {/* 複数候補リスト */}
+              {destCandidates.length > 1 && (
+                <View style={styles.candidateList}>
+                  <Text style={styles.candidateHint}>
+                    {destCandidates.length}件見つかりました。正しい場所を選んでください：
+                  </Text>
+                  {destCandidates.map((c, idx) => {
+                    const { main, sub } = formatCandidateName(c.display_name, c.type);
+                    const isSelected = destSelectedIdx === idx;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[styles.candidateItem, isSelected && styles.candidateItemSelected]}
+                        onPress={() => handleSelectDestCandidate(idx, c)}
+                      >
+                        <View style={styles.candidateItemInner}>
+                          <Text style={[styles.candidateMain, isSelected && styles.candidateMainSelected]}>
+                            {isSelected ? '✅ ' : '📍 '}{main}
+                          </Text>
+                          <Text style={[styles.candidateSub, isSelected && styles.candidateSubSelected]}>
+                            {sub}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* 確定済み表示 + 地図確認ボタン */}
+              {destLat != null && destLng != null && (
+                <View style={styles.manualConfirmedRow}>
+                  <Text style={styles.manualResult}>
+                    ✅ {destination}{'\n'}
+                    <Text style={styles.manualCoords}>
+                      {destLat.toFixed(5)}, {destLng.toFixed(5)}
+                    </Text>
+                  </Text>
+                  <TouchableOpacity style={styles.mapVerifyBtn} onPress={handleOpenDestMapConfirm}>
+                    <Text style={styles.mapVerifyBtnText}>🗺 地図で{'\n'}確認</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           )}
         </View>
 

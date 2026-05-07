@@ -135,6 +135,8 @@ export interface GenerateRouteRequest {
   routeMode: RouteMode;
   returnType: ReturnType;
   destination?: string;
+  destinationLat?: number;   // 目的地ジオコード済み緯度
+  destinationLng?: number;   // 目的地ジオコード済み経度
   emptyRoadMode: boolean;
   todayInfo: TodayInfo;
   weatherInfo?: WeatherInfo;

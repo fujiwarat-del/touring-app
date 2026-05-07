@@ -88,6 +88,8 @@ export interface GenerateRouteRequest {
   routeMode: RouteMode;
   returnType: ReturnType;
   destination?: string;
+  destinationLat?: number;
+  destinationLng?: number;
   emptyRoadMode: boolean;
   todayInfo: TodayInfo;
   weatherInfo?: WeatherInfo;

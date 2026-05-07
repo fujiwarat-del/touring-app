@@ -413,6 +413,20 @@ export default async function handler(
           console.warn(`[Route] "${r.name}" — start≈end with no intermediates (${haversineKm(wps[0].lat, wps[0].lng, wps[1].lat, wps[1].lng).toFixed(1)}km), skipping`);
           return null;
         }
+        // 目的地座標が確定済みの場合 → 最終 waypoint の座標を上書き（Claude の誤座標を修正）
+        if (
+          routeRequest.routeMode === 'destination' &&
+          routeRequest.destinationLat != null &&
+          routeRequest.destinationLng != null &&
+          wps.length > 1
+        ) {
+          const last = wps[wps.length - 1];
+          wps[wps.length - 1] = {
+            ...last,
+            lat: routeRequest.destinationLat,
+            lng: routeRequest.destinationLng,
+          };
+        }
         // For same-road return, force last waypoint to match start
         if (routeRequest.returnType === 'same' && wps.length > 1) {
           wps[wps.length - 1] = {
