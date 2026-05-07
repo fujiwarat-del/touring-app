@@ -43,6 +43,10 @@ function isCoordinateOnJapanLand(lat: number, lng: number): boolean {
     [33.0, 36.5, 130.5, 136.5],
     // 近畿・東海（東端は伊豆半島付近 lng138.5）
     [34.0, 36.0, 135.0, 138.5],
+    // 中部内陸（飛騨高山・白川郷・乗鞍・上高地など）
+    [35.5, 37.0, 136.5, 138.5],
+    // 能登半島（石川県北部）
+    [36.5, 37.6, 136.5, 137.4],
     // 関東内陸・神奈川・東京（東端は東京湾岸 lng140.0）
     [35.0, 36.5, 138.5, 140.0],
     // 房総半島（東端は旭・銚子付近 lng140.9）
@@ -384,7 +388,12 @@ export default async function handler(
         const maxDistKm = isDistanceModeWp
           ? routeRequest.targetDistanceKm!
           : Math.round((routeRequest.duration / 60) * avgSpeed);
-        const maxRadiusKm = Math.round(maxDistKm / 2);
+        // 片道(none)は全距離を一方向に使えるので道路係数1.3で割る
+        // ループ・同道・別道帰着は往復なので半分
+        const isOneWay = routeRequest.returnType === 'none';
+        const maxRadiusKm = isOneWay
+          ? Math.round(maxDistKm / 1.3)
+          : Math.round(maxDistKm / 2);
         wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
         // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
         wps = removeMajorDetours(wps);

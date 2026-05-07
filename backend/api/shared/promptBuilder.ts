@@ -58,7 +58,11 @@ export function buildPrompt(req: GenerateRouteRequest): string {
   const maxLegsCount = 6; // 7地点なら6区間
   const maxPerLegKm = Math.round(maxDistanceKm / maxLegsCount);
   const minPerLegKm = Math.max(5, Math.round(maxDistanceKm / 12)); // 経由地間の最低距離
-  const maxRadiusKm = Math.round(maxDistanceKm / 2);
+  // 片道(none)は全距離を一方向に使えるので道路係数1.3で割る / 往復系は半分
+  const isOneWay = returnType === 'none';
+  const maxRadiusKm = isOneWay
+    ? Math.round(maxDistanceKm / 1.3)
+    : Math.round(maxDistanceKm / 2);
   const minDistanceKm = Math.round(maxDistanceKm * 0.9); // 距離モード時の最低走行距離
 
   // 行動半径の緯度・経度範囲（Claude が具体的に確認できるよう計算）
