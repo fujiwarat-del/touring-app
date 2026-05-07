@@ -9,6 +9,7 @@ import {
   Alert,
   TextInput,
   SafeAreaView,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
@@ -71,6 +72,12 @@ export default function HomeScreen() {
   const [manualLng, setManualLng] = useState<number | null>(null);
   const [manualLocationName, setManualLocationName] = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
+  // 複数候補の型
+  type GeocodeCandidate = {
+    lat: string; lon: string; display_name: string; type: string; class: string;
+  };
+  const [geocodeCandidates, setGeocodeCandidates] = useState<GeocodeCandidate[]>([]);
+  const [selectedCandidateIdx, setSelectedCandidateIdx] = useState<number | null>(null);
 
   // Fetch weather when location changes
   useEffect(() => {
@@ -97,26 +104,31 @@ export default function HomeScreen() {
   const handleGeocode = useCallback(async () => {
     if (!manualLocationText.trim()) return;
     setGeocoding(true);
+    // 検索するたびに候補・確定をリセット
+    setGeocodeCandidates([]);
+    setSelectedCandidateIdx(null);
+    setManualLat(null);
+    setManualLng(null);
+    setManualLocationName(null);
     try {
-      // OpenStreetMap Nominatim API（デバイス依存なし・無料）
       const query = encodeURIComponent(manualLocationText.trim());
-      const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&accept-language=ja&countrycodes=jp`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&accept-language=ja&countrycodes=jp`;
       const res = await fetch(url, {
         headers: { 'User-Agent': 'TouringPlannerApp/1.0' },
       });
       if (!res.ok) throw new Error('network error');
       const data = await res.json();
       if (data.length > 0) {
-        const { lat, lon, display_name } = data[0];
-        setManualLat(parseFloat(lat));
-        setManualLng(parseFloat(lon));
-        // 表示名を簡略化（最初の2〜3要素）
-        const shortName = (display_name as string)
-          .split(',')
-          .slice(0, 2)
-          .map((s: string) => s.trim())
-          .join(' ');
-        setManualLocationName(shortName || manualLocationText.trim());
+        setGeocodeCandidates(data);
+        // 候補が1件だけなら自動選択
+        if (data.length === 1) {
+          const c = data[0];
+          setSelectedCandidateIdx(0);
+          setManualLat(parseFloat(c.lat));
+          setManualLng(parseFloat(c.lon));
+          const parts = (c.display_name as string).split(',').map((s: string) => s.trim());
+          setManualLocationName(parts.slice(0, 2).join(' ') || manualLocationText.trim());
+        }
       } else {
         Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください（例: 箱根、静岡市）');
       }
@@ -126,6 +138,40 @@ export default function HomeScreen() {
       setGeocoding(false);
     }
   }, [manualLocationText]);
+
+  // 候補を選択して確定
+  const handleSelectCandidate = useCallback((idx: number, c: { lat: string; lon: string; display_name: string }) => {
+    setSelectedCandidateIdx(idx);
+    setManualLat(parseFloat(c.lat));
+    setManualLng(parseFloat(c.lon));
+    const parts = (c.display_name as string).split(',').map((s: string) => s.trim());
+    setManualLocationName(parts.slice(0, 2).join(' ') || manualLocationText.trim());
+  }, [manualLocationText]);
+
+  // 選択済み地点をGoogle Mapsで確認
+  const handleOpenMapConfirm = useCallback(() => {
+    if (manualLat == null || manualLng == null) return;
+    const url = `https://www.google.com/maps/search/?api=1&query=${manualLat},${manualLng}`;
+    Linking.openURL(url);
+  }, [manualLat, manualLng]);
+
+  // 候補の表示名を整形（"地名（都道府県）"形式）
+  const formatCandidateName = (display_name: string, type: string): { main: string; sub: string } => {
+    const parts = display_name.split(',').map((s: string) => s.trim());
+    const main = parts[0] ?? display_name;
+    // 都道府県を探す（○○県/○○都/○○道/○○府）
+    const pref = parts.find((p) => /[都道府県]$/.test(p));
+    const city = parts.find((p) => p !== main && /[市区町村郡]$/.test(p));
+    const sub = [city, pref].filter(Boolean).join(', ') || parts.slice(1, 3).join(', ');
+    const typeLabel: Record<string, string> = {
+      city: '市区町村', town: '町村', village: '集落', administrative: '行政区',
+      road: '道路', highway: '道路', residential: '住宅街',
+      attraction: '観光地', tourism: '観光地', natural: '自然', park: '公園',
+      station: '駅', railway: '鉄道',
+    };
+    const label = typeLabel[type] ?? type;
+    return { main, sub: sub ? `${sub}（${label}）` : label };
+  };
 
   const togglePurpose = (p: TouringPurpose) => {
     setSelectedPurposes((prev) =>
@@ -280,7 +326,17 @@ export default function HomeScreen() {
                   placeholder="例: 箱根、静岡市、東京都新宿区"
                   placeholderTextColor={COLORS.textMuted}
                   value={manualLocationText}
-                  onChangeText={setManualLocationText}
+                  onChangeText={(t) => {
+                    setManualLocationText(t);
+                    // テキスト変更時は候補・確定をクリア
+                    if (geocodeCandidates.length > 0) {
+                      setGeocodeCandidates([]);
+                      setSelectedCandidateIdx(null);
+                      setManualLat(null);
+                      setManualLng(null);
+                      setManualLocationName(null);
+                    }
+                  }}
                   onSubmitEditing={handleGeocode}
                   returnKeyType="search"
                 />
@@ -296,10 +352,49 @@ export default function HomeScreen() {
                   )}
                 </TouchableOpacity>
               </View>
-              {manualLat && manualLng && (
-                <Text style={styles.manualResult}>
-                  ✅ {manualLocationName}（{manualLat.toFixed(4)}, {manualLng.toFixed(4)}）
-                </Text>
+
+              {/* 複数候補リスト */}
+              {geocodeCandidates.length > 1 && (
+                <View style={styles.candidateList}>
+                  <Text style={styles.candidateHint}>
+                    {geocodeCandidates.length}件見つかりました。正しい場所を選んでください：
+                  </Text>
+                  {geocodeCandidates.map((c, idx) => {
+                    const { main, sub } = formatCandidateName(c.display_name, c.type);
+                    const isSelected = selectedCandidateIdx === idx;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[styles.candidateItem, isSelected && styles.candidateItemSelected]}
+                        onPress={() => handleSelectCandidate(idx, c)}
+                      >
+                        <View style={styles.candidateItemInner}>
+                          <Text style={[styles.candidateMain, isSelected && styles.candidateMainSelected]}>
+                            {isSelected ? '✅ ' : '📍 '}{main}
+                          </Text>
+                          <Text style={[styles.candidateSub, isSelected && styles.candidateSubSelected]}>
+                            {sub}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* 確定済み表示 + 地図確認ボタン */}
+              {manualLat != null && manualLng != null && (
+                <View style={styles.manualConfirmedRow}>
+                  <Text style={styles.manualResult}>
+                    ✅ {manualLocationName}{'\n'}
+                    <Text style={styles.manualCoords}>
+                      {manualLat.toFixed(5)}, {manualLng.toFixed(5)}
+                    </Text>
+                  </Text>
+                  <TouchableOpacity style={styles.mapVerifyBtn} onPress={handleOpenMapConfirm}>
+                    <Text style={styles.mapVerifyBtnText}>🗺 地図で{'\n'}確認</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           ) : (
@@ -1028,10 +1123,83 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHT.bold,
   },
   manualResult: {
+    flex: 1,
     marginTop: SPACING.sm,
     fontSize: FONT_SIZE.sm,
     color: COLORS.primary,
     fontWeight: FONT_WEIGHT.semiBold,
+    lineHeight: 20,
+  },
+  manualCoords: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHT.regular,
+  },
+  manualConfirmedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  mapVerifyBtn: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+    borderWidth: 1.5,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  mapVerifyBtnText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZE.xs,
+    fontWeight: FONT_WEIGHT.bold,
+    textAlign: 'center',
+  },
+  candidateList: {
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+  },
+  candidateHint: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.background,
+  },
+  candidateItem: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    backgroundColor: COLORS.white,
+  },
+  candidateItemSelected: {
+    backgroundColor: COLORS.primaryLight,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  candidateItemInner: {
+    gap: 2,
+  },
+  candidateMain: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semiBold,
+    color: COLORS.textPrimary,
+  },
+  candidateMainSelected: {
+    color: COLORS.primary,
+  },
+  candidateSub: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+  },
+  candidateSubSelected: {
+    color: COLORS.primaryDark,
   },
   switchRow: {
     flexDirection: 'row',
