@@ -2,6 +2,7 @@ import type { GenerateRouteRequest, Route } from '@touring/shared';
 
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? 'https://touring-planner-backend.vercel.app';
+const APP_API_KEY = process.env.EXPO_PUBLIC_APP_API_KEY ?? '';
 
 export interface ClaudeApiResult {
   routes: Route[];
@@ -19,6 +20,7 @@ export async function callClaude(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(APP_API_KEY ? { 'x-app-key': APP_API_KEY } : {}),
     },
     body: JSON.stringify(request),
   });

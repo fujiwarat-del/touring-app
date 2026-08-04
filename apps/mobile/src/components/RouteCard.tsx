@@ -55,7 +55,9 @@ export function RouteCard({
   const difficultyColor = DIFFICULTY_COLORS[route.difficulty] ?? COLORS.textSecondary;
 
   const handleOpenMap = async () => {
-    const url = makeMapUrl(route, startLat, startLng);
+    // コミュニティ由来のルートは経由地座標を持たず mapUrl のみ保持しているため、
+    // mapUrl があればそれを優先して開く（座標からの生成は空のマップになる）
+    const url = route.mapUrl || makeMapUrl(route, startLat, startLng);
     try {
       await Linking.openURL(url);
     } catch {

@@ -21,22 +21,19 @@ export async function fetchWeather(
   lat: number,
   lng: number
 ): Promise<WeatherInfo> {
-  const params = new URLSearchParams({
-    latitude: lat.toFixed(4),
-    longitude: lng.toFixed(4),
-    current: [
-      'temperature_2m',
-      'weather_code',
-      'wind_speed_10m',
-      'wind_direction_10m',
-      'precipitation',
-      'relative_humidity_2m',
-    ].join(','),
-    timezone: 'Asia/Tokyo',
-    forecast_days: '1',
-  });
+  const currentFields = [
+    'temperature_2m',
+    'weather_code',
+    'wind_speed_10m',
+    'wind_direction_10m',
+    'precipitation',
+    'relative_humidity_2m',
+  ].join(',');
 
-  const response = await fetch(`${BASE_URL}?${params.toString()}`);
+  // URLSearchParams encodes commas as %2C which some APIs reject — build URL manually
+  const url = `${BASE_URL}?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=${currentFields}&timezone=Asia%2FTokyo&forecast_days=1`;
+
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Weather API error: ${response.status}`);
   }
@@ -76,6 +73,52 @@ export async function fetchWeather(
     isGoodForRiding,
     ridingAdvice,
   };
+}
+
+// ── 日別予報（3日間） ──────────────────────────────
+export interface DailyForecast {
+  date: string;         // YYYY-MM-DD
+  weatherCode: number;
+  description: string;
+  icon: string;
+  tempMax: number;
+  tempMin: number;
+}
+
+/**
+ * Open-Meteo の日別予報を取得（無料・APIキー不要）
+ * WeatherWidget / DestWeatherBadge 共用
+ */
+export async function fetchDailyForecast(
+  lat: number,
+  lng: number,
+  days = 3
+): Promise<DailyForecast[]> {
+  const url = `${BASE_URL}?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo&forecast_days=${days}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Weather forecast API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const daily = data?.daily;
+  if (!daily?.time?.length) {
+    throw new Error('Weather forecast API returned empty daily data');
+  }
+
+  return (daily.time as string[]).map((date, i) => {
+    const code = Number(daily.weather_code?.[i] ?? -1);
+    const info = WEATHER_CODES[code] ?? { description: '不明', icon: '🌡️' };
+    return {
+      date,
+      weatherCode: code,
+      description: info.description,
+      icon: info.icon,
+      tempMax: Math.round(Number(daily.temperature_2m_max?.[i] ?? 0)),
+      tempMin: Math.round(Number(daily.temperature_2m_min?.[i] ?? 0)),
+    };
+  });
 }
 
 function determineRidingCondition(

@@ -15,6 +15,7 @@ import {
   Dimensions,
   StatusBar,
   TextInput,
+  Share,
 } from 'react-native';
 import type { CommunityPost } from '@touring/shared';
 import { getRelativeTime, PREFECTURES_BY_AREA } from '@touring/shared';
@@ -23,6 +24,7 @@ import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 import {
   getCommunityRoutes,
   getPopularRoutes,
@@ -35,7 +37,10 @@ import {
   getBookmarkedIds,
   getBookmarkedPosts,
   saveRoute,
+  reportPost,
+  blockUser,
 } from '../services/firebase';
+import { makeMapUrl } from '@touring/shared';
 import { RouteCard } from '../components/RouteCard';
 import { computeBadges } from '../utils/badges';
 import type { Badge, UserStats } from '../utils/badges';
@@ -55,6 +60,7 @@ const REACTION_STAMPS: Array<{ type: string; emoji: string }> = [
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 export default function CommunityScreen() {
+  const { colors } = useTheme();
   const navigation = useNavigation<NavProp>();
   const [activeTab, setActiveTab] = useState<TabType>('latest');
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -75,6 +81,19 @@ export default function CommunityScreen() {
     getMyReactions().then(setMyReactions).catch(() => {});
     getBookmarkedIds().then((ids) => setBookmarkedIds(new Set(ids))).catch(() => {});
   }, []);
+
+  // ユーザーIDが確定したら、現在ロード済みのポストの likedBy から初期いいね状態を復元
+  // ※ posts を deps に入れない → optimistic update が posts を更新するたびに再実行されるのを防ぐ
+  useEffect(() => {
+    if (!myUid || posts.length === 0) return;
+    const fromPosts = new Set<string>(
+      posts
+        .filter((p) => p.id && (p.likedBy as string[] | undefined)?.includes(myUid))
+        .map((p) => p.id!)
+    );
+    setLikedIds(fromPosts);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUid]); // myUid が確定したタイミングのみ実行（posts 変化時は意図的に無視）
 
   const loadPosts = useCallback(async (
     tab: TabType = activeTab,
@@ -234,6 +253,77 @@ export default function CommunityScreen() {
     }
   };
 
+  // 投稿を外部共有（X・LINE等。共有シートからコピーも可能）
+  const handleShareExternal = async (post: CommunityPost) => {
+    try {
+      const r = post.route;
+      const mapUrl = (r as any)?.mapUrl || (r?.waypointObjects?.length ? makeMapUrl(r) : '');
+      await Share.share({
+        title: r?.name ?? 'ツーリングルート',
+        message:
+          `🏍️ ${r?.name ?? 'ツーリングルート'}\n` +
+          (post.comment ? `${post.comment}\n\n` : '\n') +
+          (mapUrl ? `🗺️ ルートを開く:\n${mapUrl}\n\n` : '') +
+          `ツーリングプランナーのコミュニティより`,
+      });
+    } catch {
+      // キャンセル
+    }
+  };
+
+  // 通報・ブロックメニュー（App Store UGC要件）
+  const handleModerate = (post: CommunityPost) => {
+    Alert.alert('この投稿について', post.userDisplayName, [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '🚫 このユーザーをブロック',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert(
+            'ユーザーをブロック',
+            `${post.userDisplayName} さんの投稿が今後表示されなくなります。よろしいですか？`,
+            [
+              { text: 'キャンセル', style: 'cancel' },
+              {
+                text: 'ブロックする',
+                style: 'destructive',
+                onPress: async () => {
+                  await blockUser(post.userId);
+                  setPosts((prev) => prev.filter((p) => p.userId !== post.userId));
+                  Alert.alert('ブロックしました', 'このユーザーの投稿は表示されなくなりました。');
+                },
+              },
+            ]
+          );
+        },
+      },
+      {
+        text: '🚩 通報する',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('通報の理由を選択してください', undefined, [
+            { text: 'キャンセル', style: 'cancel' },
+            ...['不適切な画像・内容', 'スパム・宣伝', '嫌がらせ・迷惑行為', 'その他'].map((reason) => ({
+              text: reason,
+              onPress: async () => {
+                try {
+                  await reportPost(post, reason);
+                  setPosts((prev) => prev.filter((p) => p.id !== post.id));
+                  Alert.alert(
+                    '通報を受け付けました',
+                    'ご報告ありがとうございます。運営が24時間以内に内容を確認し、対応いたします。この投稿は非表示になりました。'
+                  );
+                } catch {
+                  Alert.alert('エラー', '通報の送信に失敗しました。しばらく後でお試しください。');
+                }
+              },
+            })),
+          ]);
+        },
+      },
+    ]);
+  };
+
   const handleTagPress = (tag: string) => {
     // 同じタグをもう一度押したら解除
     if (tag === activeTag) {
@@ -288,29 +378,28 @@ export default function CommunityScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.headerTitle}>🏍️ みんなのコース</Text>
-            <Text style={styles.headerSubtitle}>ライダーたちのツーリングルートを見つけよう</Text>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>🏍️ みんなのコース</Text>
+            <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>ライダーたちのツーリングルートを見つけよう</Text>
           </View>
           <TouchableOpacity style={styles.postBtn} onPress={() => navigation.navigate('Post')}>
             <Text style={styles.postBtnText}>＋ 投稿</Text>
           </TouchableOpacity>
         </View>
         {/* 検索バー */}
-        <View style={styles.searchBar}>
+        <View style={[styles.searchBar, { backgroundColor: colors.chipBg }]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="ルート名・タグ・エリアで検索..."
-            placeholderTextColor="rgba(255,255,255,0.6)"
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
             returnKeyType="search"
-            clearButtonMode="while-editing"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -486,6 +575,8 @@ export default function CommunityScreen() {
                     displayName: post.userDisplayName,
                   })
                 }
+                onModerate={() => handleModerate(post)}
+                onShareExternal={() => handleShareExternal(post)}
               />
             );
           })}
@@ -546,13 +637,15 @@ interface PostCardProps {
   isBookmarked: boolean;
   onBookmark: () => void;
   onSaveRoute: () => void;
+  onModerate?: () => void;
+  onShareExternal?: () => void;
 }
 
 function CommunityPostCard({
   post, badges, isLiked, onLike, isOwn, onDelete,
   onTagPress, activeTag, onAreaPress, activeArea,
   onPrefecturePress, activePrefecture, onPhotoPress, onUserPress,
-  myReactions, onReaction, isBookmarked, onBookmark, onSaveRoute,
+  myReactions, onReaction, isBookmarked, onBookmark, onSaveRoute, onModerate, onShareExternal,
 }: PostCardProps) {
   const [showRoute, setShowRoute] = useState(false);
   const visibleBadges = badges.slice(0, 3);
@@ -606,9 +699,19 @@ function CommunityPostCard({
             {isBookmarked ? '保存中' : '後で見る'}
           </Text>
         </TouchableOpacity>
+        {onShareExternal && (
+          <TouchableOpacity onPress={onShareExternal} style={cardStyles.deleteBtn}>
+            <Text style={cardStyles.deleteBtnText}>📤</Text>
+          </TouchableOpacity>
+        )}
         {isOwn && (
           <TouchableOpacity onPress={onDelete} style={cardStyles.deleteBtn}>
             <Text style={cardStyles.deleteBtnText}>🗑️</Text>
+          </TouchableOpacity>
+        )}
+        {!isOwn && onModerate && (
+          <TouchableOpacity onPress={onModerate} style={cardStyles.deleteBtn}>
+            <Text style={cardStyles.deleteBtnText}>⚠️</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -764,7 +867,7 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F4F4F4',
     borderRadius: RADIUS.full,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
@@ -774,11 +877,11 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: FONT_SIZE.sm,
-    color: COLORS.white,
+    color: COLORS.textPrimary,
     paddingVertical: 0,
   },
   searchClear: {
-    color: 'rgba(255,255,255,0.8)',
+    color: COLORS.textLight,
     fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.bold,
     paddingHorizontal: SPACING.xs,
@@ -796,15 +899,15 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: FONT_WEIGHT.semiBold,
   },
-  headerTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, color: COLORS.white },
-  headerSubtitle: { fontSize: FONT_SIZE.sm, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  headerTitle: { fontSize: FONT_SIZE.xxl, fontWeight: FONT_WEIGHT.bold, color: COLORS.textPrimary },
+  headerSubtitle: { fontSize: FONT_SIZE.sm, color: COLORS.textLight, marginTop: 4 },
   postBtn: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.full,
   },
-  postBtnText: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
+  postBtnText: { color: COLORS.white, fontSize: FONT_SIZE.sm, fontWeight: FONT_WEIGHT.bold },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,

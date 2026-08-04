@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "cccb0b99-2279-497f-a97c-c486c8ea7ca5"
+      }
+    },
+    "android": {
+      "package": "com.wo_fuji.touringapp"
+    }
+  }
+}

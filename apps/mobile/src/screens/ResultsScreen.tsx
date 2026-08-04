@@ -14,9 +14,11 @@ import type { RouteProp } from '@react-navigation/native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { Route } from '@touring/shared';
+import { makeMapUrl } from '@touring/shared';
 import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 import { RouteCard } from '../components/RouteCard';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { saveRoute } from '../services/firebase';
@@ -25,6 +27,7 @@ type ResultsRouteProp = RouteProp<RootStackParamList, 'Results'>;
 type NavProp = StackNavigationProp<RootStackParamList>;
 
 export default function ResultsScreen() {
+  const { colors } = useTheme();
   const navigation = useNavigation<NavProp>();
   const route = useRoute<ResultsRouteProp>();
   const routes = route.params?.routes ?? [];
@@ -56,14 +59,19 @@ export default function ResultsScreen() {
 
   const handleShare = useCallback(async (tourRoute: Route) => {
     try {
+      const mapUrl = (tourRoute as any).mapUrl ?? makeMapUrl(tourRoute, startLat, startLng);
       await Share.share({
         title: tourRoute.name,
-        message: `${tourRoute.name}\n${tourRoute.description}\n\n距離: ${tourRoute.distance} | 時間: ${tourRoute.time} | 難易度: ${tourRoute.difficulty}\n\nツーリングプランナーアプリで詳細を確認`,
+        message:
+          `🏍️ ${tourRoute.name}\n${tourRoute.description}\n\n` +
+          `📏 ${tourRoute.distance} | ⏱️ ${tourRoute.time} | ⚡ ${tourRoute.difficulty}\n\n` +
+          `🗺️ ルートを開く:\n${mapUrl}\n\n` +
+          `ツーリングプランナーで作成`,
       });
     } catch {
       // User cancelled
     }
-  }, []);
+  }, [startLat, startLng]);
 
   const handleSaveAll = useCallback(async () => {
     Alert.alert(
@@ -107,13 +115,13 @@ export default function ResultsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       {/* Results Header */}
-      <View style={styles.resultsHeader}>
-        <Text style={styles.resultsTitle}>
+      <View style={[styles.resultsHeader, { backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
+        <Text style={[styles.resultsTitle, { color: colors.textPrimary }]}>
           🎉 {routes.length}つのルートが見つかりました
         </Text>
-        <Text style={styles.resultsSubtitle}>
+        <Text style={[styles.resultsSubtitle, { color: colors.textLight }]}>
           あなたの条件に合わせたAI厳選ルートです
         </Text>
         <WeatherWidget lat={startLat} lng={startLng} />
@@ -142,12 +150,33 @@ export default function ResultsScreen() {
                 navigation.navigate('RouteMap', {
                   routeData: { name: tourRoute.name, waypointObjects: tourRoute.waypointObjects },
                   mapUrl: tourRoute.mapUrl,
+                  startLat,
+                  startLng,
                 })
               }
               showActions
               startLat={startLat}
               startLng={startLng}
             />
+            {/* このツーリングを記録する（アルバムへプレフィル） */}
+            <TouchableOpacity
+              style={styles.recordTourLink}
+              onPress={() => {
+                const wps = r.waypointObjects ?? [];
+                const names = wps.map((wp) => wp.name).filter(Boolean);
+                navigation.navigate('TourForm', {
+                  prefill: {
+                    title: r.name,
+                    distanceKm: parseInt(String(r.distance).replace(/[^\d]/g, ''), 10) || 0,
+                    origin: names[0] ?? '',
+                    waypoints: names.slice(1, -1),
+                    destination: names.length > 1 ? names[names.length - 1] : '',
+                  },
+                });
+              }}
+            >
+              <Text style={styles.recordTourLinkText}>📔 このツーリングを記録する ›</Text>
+            </TouchableOpacity>
           </View>
         ))}
 
@@ -164,6 +193,15 @@ export default function ResultsScreen() {
           <Text style={styles.regenerateBtnText}>
             🔄 条件を変えて再生成
           </Text>
+        </TouchableOpacity>
+
+        {/* 出発前チェック導線（控えめ） */}
+        <TouchableOpacity
+          style={styles.preCheckBanner}
+          onPress={() => navigation.navigate('Checklist', {})}
+        >
+          <Text style={styles.preCheckText}>🔧 出発前チェックはお済みですか？</Text>
+          <Text style={styles.preCheckArrow}>›</Text>
         </TouchableOpacity>
 
         <View style={{ height: SPACING.xxxl }} />
@@ -185,11 +223,11 @@ const styles = StyleSheet.create({
   resultsTitle: {
     fontSize: FONT_SIZE.xl,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+    color: COLORS.textPrimary,
   },
   resultsSubtitle: {
     fontSize: FONT_SIZE.sm,
-    color: 'rgba(255,255,255,0.85)',
+    color: COLORS.textLight,
     marginTop: 4,
   },
   scroll: {
@@ -238,6 +276,37 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: FONT_SIZE.lg,
     fontWeight: FONT_WEIGHT.bold,
+  },
+  preCheckBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(29,158,117,0.08)',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.md,
+  },
+  preCheckText: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHT.semiBold,
+  },
+  preCheckArrow: {
+    fontSize: FONT_SIZE.xl,
+    color: COLORS.textMuted,
+  },
+  recordTourLink: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    marginTop: -SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  recordTourLinkText: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.semiBold,
   },
   emptyContainer: {
     flex: 1,

@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// ============================================================
+// 【暫定ルール】Firebase Auth 未導入のため認証チェックなしで運用
+//
+// アプリは AsyncStorage の匿名UIDを使用しており request.auth が常に null。
+// そのため isOwner() ベースの本来ルール（firestore.rules）は適用できない。
+// 正式リリース前に Firebase 匿名認証を導入し、firestore.rules へ切り替えること。
+//
+// 方針: アプリが実際に使うコレクションのみ許可し、それ以外はすべて拒否。
+//       クライアントから改ざんされたくないフィールド（banned）だけは保護。
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // コミュニティ投稿（読み書き・いいね・削除）
+    match /communityPosts/{postId} {
+      allow read, create, update, delete: if true;
+    }
+
+    // ユーザープロフィール（プッシュトークン・写真・バイク一覧・BANフラグ）
+    match /userProfiles/{userId} {
+      allow read: if true;
+      // banned フィールドはクライアントから変更不可（Firebase Console からのみ）
+      allow create: if !('banned' in request.resource.data);
+      allow update: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['banned']);
+      allow delete: if false;
+    }
+
+    // ユーザーデータ（保存ルート・ガレージ・チェックリスト・アルバム）
+    match /users/{userId}/{document=**} {
+      allow read, write: if true;
+    }
+
+    // UGC通報（作成のみ。閲覧・対応は Firebase Console から）
+    match /reports/{reportId} {
+      allow create: if request.resource.data.keys().hasAll(['postId', 'reporterUid', 'reason'])
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() < 200;
+      allow read, update, delete: if false;
+    }
+
+    // アプリ設定（読み取りのみ）
+    match /appConfig/{configId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // それ以外はすべて拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

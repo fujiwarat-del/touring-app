@@ -66,6 +66,16 @@ function getDb(): ReturnType<typeof getFirestore> | null {
   return _db;
 }
 
+/** 他サービス層（garage.ts 等）から Firestore にアクセスするための公開ゲッター */
+export function getFirestoreDb(): ReturnType<typeof getFirestore> | null {
+  return getDb();
+}
+
+/** Firebase App インスタンスの公開ゲッター（Storage 初期化用） */
+export function getFirebaseApp(): ReturnType<typeof initializeApp> | null {
+  return getApp_();
+}
+
 // ============================================================
 // 匿名ユーザー管理（Firebase Auth不使用・AsyncStorage利用）
 // ============================================================
@@ -222,7 +232,7 @@ export async function deleteSavedRoute(routeId: string): Promise<void> {
   if (!db) return;
   const user = await ensureAnonymousAuth();
   const routeRef = doc(db, 'users', user.uid, 'savedRoutes', routeId);
-  await updateDoc(routeRef, { deletedAt: serverTimestamp() });
+  await deleteDoc(routeRef);
 }
 
 // ============================================================
@@ -240,6 +250,12 @@ export async function postCommunityRoute(
   const db = getDb();
   if (!db) throw new Error('Firebase が未設定です。');
   const user = await ensureAnonymousAuth();
+
+  // BAN済みユーザーは投稿不可（App Store UGC要件：問題ユーザーの排除）
+  if (await isBannedUser()) {
+    throw new Error('コミュニティガイドライン違反のため、投稿が制限されています。');
+  }
+
   const postsRef = collection(db, 'communityPosts');
   const docRef = await addDoc(postsRef, {
     userId: user.uid,
@@ -255,6 +271,104 @@ export async function postCommunityRoute(
     createdAt: serverTimestamp(),
   } satisfies Omit<CommunityPost, 'id'>);
   return docRef.id;
+}
+
+// ============================================================
+// モデレーション（通報・ブロック・BAN）
+// App Store 審査ガイドライン 1.2（UGC要件）対応
+// ============================================================
+
+const BLOCKED_USERS_KEY = '@touring_app_blocked_users';
+const HIDDEN_POSTS_KEY = '@touring_app_hidden_posts';
+const UGC_TERMS_KEY = '@touring_app_ugc_terms_accepted';
+
+/** ブロック済みユーザーID一覧 */
+export async function getBlockedUsers(): Promise<string[]> {
+  const raw = await AsyncStorage.getItem(BLOCKED_USERS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+/** ユーザーをブロック（以後そのユーザーの投稿は非表示） */
+export async function blockUser(uid: string): Promise<void> {
+  const list = await getBlockedUsers();
+  if (!list.includes(uid)) {
+    list.push(uid);
+    await AsyncStorage.setItem(BLOCKED_USERS_KEY, JSON.stringify(list));
+  }
+}
+
+/** ブロック解除 */
+export async function unblockUser(uid: string): Promise<void> {
+  const list = await getBlockedUsers();
+  await AsyncStorage.setItem(BLOCKED_USERS_KEY, JSON.stringify(list.filter((u) => u !== uid)));
+}
+
+/** 非表示にした投稿ID一覧（通報時に自動追加） */
+async function getHiddenPostIds(): Promise<string[]> {
+  const raw = await AsyncStorage.getItem(HIDDEN_POSTS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+/**
+ * 投稿を通報する。reports コレクションに記録し、通報者の画面からは即座に非表示にする。
+ * 通報内容は Firebase Console の reports コレクションで確認 → 24時間以内に対応すること。
+ */
+export async function reportPost(post: CommunityPost, reason: string): Promise<void> {
+  const db = getDb();
+  const user = await ensureAnonymousAuth();
+
+  // 通報者の画面からは即非表示（Apple要件：通報したコンテンツが見え続けない）
+  if (post.id) {
+    const hidden = await getHiddenPostIds();
+    if (!hidden.includes(post.id)) {
+      hidden.push(post.id);
+      await AsyncStorage.setItem(HIDDEN_POSTS_KEY, JSON.stringify(hidden));
+    }
+  }
+
+  if (!db) return;
+  await addDoc(collection(db, 'reports'), {
+    postId: post.id ?? '',
+    postUserId: post.userId,
+    postUserDisplayName: post.userDisplayName,
+    postComment: (post.comment ?? '').slice(0, 200),
+    postPhotoUrls: post.photos ?? [],
+    reporterUid: user.uid,
+    reason,
+    status: 'open', // open → resolved に手動更新（Firebase Console）
+    createdAt: serverTimestamp(),
+  });
+}
+
+/** ブロック済みユーザー・通報済み投稿を除外する共通フィルタ */
+async function filterModerated(posts: CommunityPost[]): Promise<CommunityPost[]> {
+  const [blocked, hidden] = await Promise.all([getBlockedUsers(), getHiddenPostIds()]);
+  if (blocked.length === 0 && hidden.length === 0) return posts;
+  return posts.filter(
+    (p) => !blocked.includes(p.userId) && !(p.id && hidden.includes(p.id))
+  );
+}
+
+/** 自分がBANされているか確認（userProfiles.banned を Firebase Console から手動設定） */
+export async function isBannedUser(): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
+  try {
+    const user = await ensureAnonymousAuth();
+    const snap = await getDoc(doc(db, 'userProfiles', user.uid));
+    return snap.exists() && snap.data().banned === true;
+  } catch {
+    return false;
+  }
+}
+
+/** UGC利用規約への同意状態 */
+export async function hasAcceptedUgcTerms(): Promise<boolean> {
+  return (await AsyncStorage.getItem(UGC_TERMS_KEY)) === 'true';
+}
+
+export async function acceptUgcTerms(): Promise<void> {
+  await AsyncStorage.setItem(UGC_TERMS_KEY, 'true');
 }
 
 function mapPost(d: import('firebase/firestore').QueryDocumentSnapshot): CommunityPost {
@@ -292,7 +406,7 @@ export async function getCommunityRoutes(
   }
 
   const snapshot = await getDocs(q);
-  const posts = snapshot.docs.map(mapPost);
+  const posts = await filterModerated(snapshot.docs.map(mapPost));
 
   if (prefecture || tag || area) {
     return posts.sort((a, b) => {
@@ -326,7 +440,7 @@ export async function getPopularRoutes(
   }
 
   const snapshot = await getDocs(q);
-  const posts = snapshot.docs.map(mapPost);
+  const posts = await filterModerated(snapshot.docs.map(mapPost));
 
   if (prefecture || tag || area) {
     return posts.sort((a, b) => (b.likes ?? 0) - (a.likes ?? 0));
@@ -496,7 +610,7 @@ export async function getBookmarkedPosts(): Promise<CommunityPost[]> {
   // Firestore の in クエリは最大30件
   const q = query(postsRef, where(documentId(), 'in', ids.slice(0, 30)));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(mapPost);
+  return filterModerated(snapshot.docs.map(mapPost));
 }
 
 export async function toggleLike(postId: string): Promise<void> {
@@ -532,9 +646,13 @@ async function sendLikeNotification(params: {
   actorName: string;
   postName: string;
 }): Promise<void> {
+  const appKey = process.env.EXPO_PUBLIC_APP_API_KEY ?? '';
   await fetch(`${API_BASE}/api/notify`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(appKey ? { 'x-app-key': appKey } : {}),
+    },
     body: JSON.stringify(params),
   });
 }

@@ -10,6 +10,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -29,6 +31,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 
 import type { Route, WaypointObject } from '@touring/shared';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import HomeScreen from './src/screens/HomeScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import PostScreen from './src/screens/PostScreen';
@@ -37,21 +40,53 @@ import SavedScreen from './src/screens/SavedScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import RouteMapScreen from './src/screens/RouteMapScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
+import GarageScreen from './src/screens/GarageScreen';
+import BikeFormScreen from './src/screens/BikeFormScreen';
+import BikeDetailScreen from './src/screens/BikeDetailScreen';
+import ChecklistScreen from './src/screens/ChecklistScreen';
+import AlbumScreen from './src/screens/AlbumScreen';
+import TourFormScreen from './src/screens/TourFormScreen';
+import TourDetailScreen from './src/screens/TourDetailScreen';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
   HomeTabs: undefined;
   Results: { routes?: Route[]; startLat?: number; startLng?: number };
-  Post: undefined;
+  Post: {
+    prefill?: {
+      routeName: string;
+      comment: string;
+      photoUrls: string[];      // アップロード済みURL（再アップロード不要）
+      prefectures: string[];
+    };
+  } | undefined;
   RouteMap: {
     routeData: { name: string; waypointObjects: WaypointObject[] };
     mapUrl?: string;
+    startLat?: number;
+    startLng?: number;
   };
   UserProfile: { userId: string; displayName: string };
+  BikeForm: { bikeId?: string };
+  BikeDetail: { bikeId: string };
+  Checklist: { bikeId?: string };
+  TourForm: {
+    tourId?: string;
+    prefill?: {
+      title: string;
+      distanceKm: number;
+      origin: string;
+      waypoints: string[];
+      destination: string;
+    };
+  };
+  TourDetail: { tourId: string };
 };
 export type HomeTabParamList = {
   Home: undefined;
   Community: undefined;
+  Garage: undefined;
+  Album: undefined;
   Saved: undefined;
   Profile: undefined;
 };
@@ -63,15 +98,16 @@ const Tab   = createBottomTabNavigator<HomeTabParamList>();
 function HomeTabs() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
+  const { colors, isDark } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#1D9E75',
-        tabBarInactiveTintColor: '#999',
+        tabBarActiveTintColor: colors.tabActive,
+        tabBarInactiveTintColor: colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopColor: '#e5e7eb',
+          backgroundColor: colors.cardBg,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
           paddingTop: 4,
@@ -92,6 +128,16 @@ function HomeTabs() {
         name="Community"
         component={CommunityScreen}
         options={{ tabBarLabel: 'コミュニティ', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text> }}
+      />
+      <Tab.Screen
+        name="Garage"
+        component={GarageScreen}
+        options={{ tabBarLabel: 'ガレージ', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔧</Text> }}
+      />
+      <Tab.Screen
+        name="Album"
+        component={AlbumScreen}
+        options={{ tabBarLabel: 'アルバム', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📔</Text> }}
       />
       <Tab.Screen
         name="Saved"
@@ -179,65 +225,83 @@ async function registerForPushNotifications() {
 }
 
 // ─── メインアプリ ─────────────────────────────────────────
+function AppNavigator() {
+  const { colors, isDark } = useTheme();
+  // 白ベースミニマル: ヘッダーも白＋黒文字＋ヘアライン（IG風）
+  const headerOpts = {
+    headerStyle: {
+      backgroundColor: colors.cardBg,
+      shadowColor: 'transparent',
+      elevation: 0,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderLight,
+    },
+    headerTintColor: colors.textPrimary,
+    headerTitleStyle: { fontWeight: 'bold' as const },
+  };
+
+  return (
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="HomeTabs" component={HomeTabs} />
+        <Stack.Screen name="Results"     component={ResultsScreen}     options={{ headerShown: true, title: 'ルート提案',    ...headerOpts }} />
+        <Stack.Screen name="Post"        component={PostScreen}        options={{ headerShown: true, title: 'ルートを投稿',  ...headerOpts }} />
+        <Stack.Screen name="RouteMap"    component={RouteMapScreen}    options={{ headerShown: true, title: 'ルートマップ',  ...headerOpts }} />
+        <Stack.Screen
+          name="UserProfile"
+          component={UserProfileScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: (route.params as any).displayName ?? 'プロフィール',
+            ...headerOpts,
+          })}
+        />
+        <Stack.Screen
+          name="BikeForm"
+          component={BikeFormScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: (route.params as any)?.bikeId ? '車両を編集' : '愛車を登録',
+            ...headerOpts,
+          })}
+        />
+        <Stack.Screen name="BikeDetail" component={BikeDetailScreen} options={{ headerShown: true, title: '車両詳細', ...headerOpts }} />
+        <Stack.Screen name="Checklist"  component={ChecklistScreen}  options={{ headerShown: true, title: '出発前チェック', ...headerOpts }} />
+        <Stack.Screen
+          name="TourForm"
+          component={TourFormScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: (route.params as any)?.tourId ? '記録を編集' : 'ツーリングを記録',
+            ...headerOpts,
+          })}
+        />
+        <Stack.Screen name="TourDetail" component={TourDetailScreen} options={{ headerShown: true, title: 'ツーリング記録', ...headerOpts }} />
+      </Stack.Navigator>
+    </>
+  );
+}
+
 export default function App() {
   useEffect(() => {
-    registerForPushNotifications();
+    registerForPushNotifications().then(() => {
+      // 期日リマインダー（車検・自賠責・任意保険・免許証）を最新データで再登録
+      import('./src/services/reminders').then(({ rescheduleAllReminders }) =>
+        rescheduleAllReminders().catch(() => {})
+      );
+    });
   }, []);
 
   return (
     <SafeAreaProvider>
     <AppErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <NavigationContainer>
-          <StatusBar style="light" />
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="HomeTabs" component={HomeTabs} />
-            <Stack.Screen
-              name="Results"
-              component={ResultsScreen}
-              options={{
-                headerShown: true,
-                title: 'ルート提案',
-                headerStyle: { backgroundColor: '#1D9E75' },
-                headerTintColor: '#fff',
-                headerTitleStyle: { fontWeight: 'bold' },
-              }}
-            />
-            <Stack.Screen
-              name="Post"
-              component={PostScreen}
-              options={{
-                headerShown: true,
-                title: 'ルートを投稿',
-                headerStyle: { backgroundColor: '#1D9E75' },
-                headerTintColor: '#fff',
-                headerTitleStyle: { fontWeight: 'bold' },
-              }}
-            />
-            <Stack.Screen
-              name="RouteMap"
-              component={RouteMapScreen}
-              options={{
-                headerShown: true,
-                title: 'ルートマップ',
-                headerStyle: { backgroundColor: '#1D9E75' },
-                headerTintColor: '#fff',
-                headerTitleStyle: { fontWeight: 'bold' },
-              }}
-            />
-            <Stack.Screen
-              name="UserProfile"
-              component={UserProfileScreen}
-              options={({ route }) => ({
-                headerShown: true,
-                title: (route.params as any).displayName ?? 'プロフィール',
-                headerStyle: { backgroundColor: '#1D9E75' },
-                headerTintColor: '#fff',
-                headerTitleStyle: { fontWeight: 'bold' },
-              })}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
+        <ThemeProvider>
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        </ThemeProvider>
       </GestureHandlerRootView>
     </AppErrorBoundary>
     </SafeAreaProvider>

@@ -33,16 +33,60 @@ import type {
 import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 import { WeatherBar } from '../components/WeatherBar';
 import { TrafficBanner } from '../components/TrafficBanner';
 import { useLocation } from '../hooks/useLocation';
 import { useTodayInfo } from '../hooks/useTodayInfo';
 import { fetchWeather } from '../services/weatherApi';
 import { callClaude } from '../services/claudeApi';
+import { geocodeRouteWaypoints } from '../services/geocodeWaypoints';
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'HomeTabs'>;
 
+/**
+ * SA/PA（高速道路サービスエリア・パーキングエリア）の検索クエリ展開
+ * 「海老名SA」→「海老名サービスエリア」等、正式名称・略称を両方試す
+ */
+function getSaPaQueryVariants(rawQuery: string): string[] {
+  const q = rawQuery.trim();
+  const variants: string[] = [q];
+
+  // SA / sa → サービスエリア
+  const saMatch = q.match(/^(.+?)\s*[Ss][Aa]$/);
+  if (saMatch) {
+    const base = saMatch[1].trim();
+    variants.push(`${base}サービスエリア`);
+    variants.push(`${base} サービスエリア`);
+  }
+
+  // PA / pa → パーキングエリア
+  const paMatch = q.match(/^(.+?)\s*[Pp][Aa]$/);
+  if (paMatch) {
+    const base = paMatch[1].trim();
+    variants.push(`${base}パーキングエリア`);
+    variants.push(`${base} パーキングエリア`);
+  }
+
+  // サービスエリア → SA も追加
+  const saFullMatch = q.match(/^(.+?)[\s　]?サービスエリア$/);
+  if (saFullMatch) {
+    variants.push(`${saFullMatch[1]}SA`);
+    variants.push(`${saFullMatch[1]} サービスエリア`);
+  }
+
+  // パーキングエリア → PA も追加
+  const paFullMatch = q.match(/^(.+?)[\s　]?パーキングエリア$/);
+  if (paFullMatch) {
+    variants.push(`${paFullMatch[1]}PA`);
+    variants.push(`${paFullMatch[1]} パーキングエリア`);
+  }
+
+  return [...new Set(variants)];
+}
+
 export default function HomeScreen() {
+  const { colors } = useTheme();
   const navigation = useNavigation<NavigationProp>();
   const location = useLocation();
   const todayInfo = useTodayInfo(location.lat, location.lng);
@@ -53,7 +97,7 @@ export default function HomeScreen() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
   // Form state
-  const [bikeType, setBikeType] = useState<BikeType>('大型');
+  const [bikeType, setBikeType] = useState<BikeType>('中型以上');
   const [selectedPurposes, setSelectedPurposes] = useState<TouringPurpose[]>(['ワインディング']);
   const [selectedPrefs, setSelectedPrefs] = useState<RidingPreference[]>([]);
   const [duration, setDuration] = useState(APP_CONFIG.defaultDuration);
@@ -66,9 +110,14 @@ export default function HomeScreen() {
   const [destCandidates, setDestCandidates] = useState<GeocodeCandidate[]>([]);
   const [destSelectedIdx, setDestSelectedIdx] = useState<number | null>(null);
   const [roadSearchMode, setRoadSearchMode] = useState<'normal' | 'empty'>('normal');
+  // 出発時刻（'now'=今すぐ / 'scheduled'=日時指定）
+  const [departureMode, setDepartureMode] = useState<'now' | 'scheduled'>('now');
+  const [departureDayOffset, setDepartureDayOffset] = useState(0); // 0=今日 1=明日 2=明後日
+  const [departureHour, setDepartureHour] = useState(8);
   const [planningMode, setPlanningMode] = useState<PlanningMode>('time');
   const [targetDistance, setTargetDistance] = useState(200); // km
   const [generating, setGenerating] = useState(false);
+  const [generatingLabel, setGeneratingLabel] = useState('AIがルートを考えています...');
 
   // Manual departure location
   const [isManualMode, setIsManualMode] = useState(false);
@@ -95,6 +144,7 @@ export default function HomeScreen() {
           setWeatherLoading(false);
         })
         .catch((err) => {
+          console.error('[Weather] fetch failed:', err?.message ?? err);
           setWeatherError('天気情報の取得に失敗しました');
           setWeatherLoading(false);
         });
@@ -116,38 +166,48 @@ export default function HomeScreen() {
     setManualLng(null);
     setManualLocationName(null);
     try {
-      const query = encodeURIComponent(manualLocationText.trim());
+      // SA/PA略称を正式名称に展開したバリアントを生成
+      const queryVariants = getSaPaQueryVariants(manualLocationText.trim());
 
-      // ── 1. Nominatim（ランドマーク・地名に強い）──
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&accept-language=ja&countrycodes=jp`;
-      const nominatimRes = await fetch(nominatimUrl, {
-        headers: { 'User-Agent': 'TouringPlannerApp/1.0' },
-      });
-      const nominatimData = nominatimRes.ok ? await nominatimRes.json() : [];
+      let candidates: GeocodeCandidate[] = [];
 
-      let candidates: GeocodeCandidate[] = nominatimData;
+      // ── 1. Nominatim（ランドマーク・地名に強い）バリアントを順に試す ──
+      for (const variant of queryVariants) {
+        const q = encodeURIComponent(variant);
+        const nominatimRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&accept-language=ja&countrycodes=jp`,
+          { headers: { 'User-Agent': 'TouringPlannerApp/1.0' } }
+        );
+        candidates = nominatimRes.ok ? await nominatimRes.json() : [];
+        if (candidates.length > 0) break;
+      }
 
-      // ── 2. Nominatim が0件 → Yahoo ジオコーダーAPI（番地まで対応）──
+      // ── 2. Nominatim が0件 → Yahoo ジオコーダーAPI（番地まで対応）バリアントを順に試す ──
       if (candidates.length === 0) {
         const yahooClientId = process.env.EXPO_PUBLIC_YAHOO_CLIENT_ID;
         if (yahooClientId) {
-          const yahooUrl = `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${yahooClientId}&query=${query}&output=json&results=5`;
-          const yahooRes = await fetch(yahooUrl);
-          if (yahooRes.ok) {
-            const yahooData = await yahooRes.json();
-            const features = yahooData?.Feature ?? [];
-            // Yahoo は座標を "lng,lat" 形式で返すので変換
-            candidates = features.map((f: any) => {
-              const [lngStr, latStr] = (f.Geometry?.Coordinates ?? '0,0').split(',');
-              const address = f.Property?.Address ?? f.Name ?? '';
-              return {
-                lat: latStr,
-                lon: lngStr,
-                display_name: address,
-                type: 'address',
-                class: 'place',
-              } as GeocodeCandidate;
-            }).filter((c: GeocodeCandidate) => c.lat && c.lon);
+          for (const variant of queryVariants) {
+            const q = encodeURIComponent(variant);
+            const yahooRes = await fetch(
+              `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${yahooClientId}&query=${q}&output=json&results=5`
+            );
+            if (yahooRes.ok) {
+              const yahooData = await yahooRes.json();
+              const features = yahooData?.Feature ?? [];
+              // Yahoo は座標を "lng,lat" 形式で返すので変換
+              candidates = features.map((f: any) => {
+                const [lngStr, latStr] = (f.Geometry?.Coordinates ?? '0,0').split(',');
+                const address = f.Property?.Address ?? f.Name ?? '';
+                return {
+                  lat: latStr,
+                  lon: lngStr,
+                  display_name: address,
+                  type: 'address',
+                  class: 'place',
+                } as GeocodeCandidate;
+              }).filter((c: GeocodeCandidate) => c.lat && c.lon);
+              if (candidates.length > 0) break;
+            }
           }
         }
       }
@@ -166,7 +226,7 @@ export default function HomeScreen() {
       } else {
         Alert.alert(
           '場所が見つかりませんでした',
-          '別のキーワードで試してください\n例: 箱根、静岡市、東京都新宿区歌舞伎町1丁目'
+          '別のキーワードで試してください\n例: 海老名SA、足柄パーキングエリア、箱根、静岡市'
         );
       }
     } catch {
@@ -201,25 +261,45 @@ export default function HomeScreen() {
     setDestLat(null);
     setDestLng(null);
     try {
-      const query = encodeURIComponent(destination.trim());
-      const nominatimRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&accept-language=ja&countrycodes=jp`,
-        { headers: { 'User-Agent': 'TouringPlannerApp/1.0' } }
-      );
-      let candidates: GeocodeCandidate[] = nominatimRes.ok ? await nominatimRes.json() : [];
+      // SA/PA略称を正式名称に展開したバリアントを生成
+      const queryVariants = getSaPaQueryVariants(destination.trim());
 
+      let candidates: GeocodeCandidate[] = [];
+
+      // ── 1. Nominatim バリアントを順に試す ──
+      for (const variant of queryVariants) {
+        const q = encodeURIComponent(variant);
+        const nominatimRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=5&accept-language=ja&countrycodes=jp`,
+          { headers: { 'User-Agent': 'TouringPlannerApp/1.0' } }
+        );
+        candidates = nominatimRes.ok ? await nominatimRes.json() : [];
+        if (candidates.length > 0) break;
+      }
+
+      // ── 2. Nominatim が0件 → Yahoo ジオコーダーAPI バリアントを順に試す ──
       if (candidates.length === 0) {
         const yahooClientId = process.env.EXPO_PUBLIC_YAHOO_CLIENT_ID;
         if (yahooClientId) {
-          const yahooRes = await fetch(
-            `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${yahooClientId}&query=${query}&output=json&results=5`
-          );
-          if (yahooRes.ok) {
-            const yahooData = await yahooRes.json();
-            candidates = (yahooData?.Feature ?? []).map((f: any) => {
-              const [lngStr, latStr] = (f.Geometry?.Coordinates ?? '0,0').split(',');
-              return { lat: latStr, lon: lngStr, display_name: f.Property?.Address ?? f.Name ?? '', type: 'address', class: 'place' } as GeocodeCandidate;
-            }).filter((c: GeocodeCandidate) => c.lat && c.lon);
+          for (const variant of queryVariants) {
+            const q = encodeURIComponent(variant);
+            const yahooRes = await fetch(
+              `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${yahooClientId}&query=${q}&output=json&results=5`
+            );
+            if (yahooRes.ok) {
+              const yahooData = await yahooRes.json();
+              candidates = (yahooData?.Feature ?? []).map((f: any) => {
+                const [lngStr, latStr] = (f.Geometry?.Coordinates ?? '0,0').split(',');
+                return {
+                  lat: latStr,
+                  lon: lngStr,
+                  display_name: f.Property?.Address ?? f.Name ?? '',
+                  type: 'address',
+                  class: 'place',
+                } as GeocodeCandidate;
+              }).filter((c: GeocodeCandidate) => c.lat && c.lon);
+              if (candidates.length > 0) break;
+            }
           }
         }
       }
@@ -234,7 +314,10 @@ export default function HomeScreen() {
           setDestination(parts.slice(0, 2).join(' ') || destination.trim());
         }
       } else {
-        Alert.alert('場所が見つかりませんでした', '別のキーワードで試してください');
+        Alert.alert(
+          '場所が見つかりませんでした',
+          '別のキーワードで試してください\n例: 海老名SA、足柄パーキングエリア、箱根'
+        );
       }
     } catch {
       Alert.alert('エラー', 'ネットワークエラーが発生しました。');
@@ -313,7 +396,21 @@ export default function HomeScreen() {
       return;
     }
 
+    // 出発予定日時を ISO 8601 で構築（今すぐの場合は undefined）
+    let departureTime: string | undefined;
+    if (departureMode === 'scheduled') {
+      const d = new Date();
+      d.setDate(d.getDate() + departureDayOffset);
+      d.setHours(departureHour, 0, 0, 0);
+      if (d.getTime() <= Date.now()) {
+        Alert.alert('出発日時が過去になっています', '未来の日時を選択するか「今すぐ出発」をお使いください。');
+        return;
+      }
+      departureTime = d.toISOString();
+    }
+
     setGenerating(true);
+    setGeneratingLabel('AIがルートを考えています...');
     try {
       // 距離モード時は距離から推算した所要時間をdurationに設定
       const avgSpeed = roadSearchMode === 'empty' ? 28 : 55;
@@ -339,10 +436,15 @@ export default function HomeScreen() {
         weatherInfo: weather ?? undefined,
         planningMode,
         targetDistanceKm: planningMode === 'distance' ? targetDistance : undefined,
+        departureTime,
       });
 
+      // 経由地の座標をNominatimで補正（AI生成座標のズレを修正）
+      setGeneratingLabel('経由地の座標を確認中...');
+      const correctedRoutes = await geocodeRouteWaypoints(result.routes);
+
       navigation.navigate('Results', {
-        routes: result.routes,
+        routes: correctedRoutes,
         startLat: effectiveLat,
         startLng: effectiveLng,
       });
@@ -353,6 +455,7 @@ export default function HomeScreen() {
       );
     } finally {
       setGenerating(false);
+      setGeneratingLabel('AIがルートを考えています...');
     }
   }, [
     effectiveLat,
@@ -368,19 +471,24 @@ export default function HomeScreen() {
     returnType,
     destination,
     roadSearchMode,
+    departureMode,
+    departureDayOffset,
+    departureHour,
     planningMode,
     targetDistance,
+    destLat,
+    destLng,
     todayInfo,
     weather,
     navigation,
   ]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>🏍️ ツーリングプランナー</Text>
-        <Text style={styles.headerSubtitle}>AIがあなたの最高のルートを提案</Text>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>🏍️ ツーリングプランナー</Text>
+        <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>AIがあなたの最高のルートを提案</Text>
       </View>
 
       <ScrollView
@@ -399,8 +507,8 @@ export default function HomeScreen() {
         />
 
         {/* Location Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📍 出発地点</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>📍 出発地点</Text>
           {/* Mode toggle */}
           <View style={styles.locationModeRow}>
             <TouchableOpacity
@@ -532,8 +640,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Bike Type Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏍️ バイクの種類</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🏍️ バイクの種類</Text>
           <View style={styles.chipGrid}>
             {BIKE_TYPES.map((bt) => (
               <TouchableOpacity
@@ -567,8 +675,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Route Mode Toggle */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🗺️ ルートモード</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🗺️ ルートモード</Text>
           <View style={styles.modeToggleRow}>
             <TouchableOpacity
               style={[
@@ -698,8 +806,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Touring Purpose */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎯 ツーリング目的（複数選択可）</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🎯 ツーリング目的（複数選択可）</Text>
           <View style={styles.purposeGrid}>
             {PURPOSES.map((p) => (
               <TouchableOpacity
@@ -725,8 +833,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Riding Preferences */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⚙️ 走行スタイル（複数選択可）</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>⚙️ 走行スタイル（複数選択可）</Text>
           <View style={styles.purposeGrid}>
             {PREFS.map((p) => (
               <TouchableOpacity
@@ -752,8 +860,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Road Search Mode ← 走行時間の前に移動 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🛣️ ルート検索タイプ</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🛣️ ルート検索タイプ</Text>
           <View style={styles.modeToggleRow}>
             <TouchableOpacity
               style={[
@@ -806,10 +914,76 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Departure Time */}
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🕐 出発時刻</Text>
+          <View style={styles.modeToggleRow}>
+            <TouchableOpacity
+              style={[styles.modeToggleBtn, departureMode === 'now' && styles.modeToggleBtnActive]}
+              onPress={() => setDepartureMode('now')}
+            >
+              <Text style={[styles.modeToggleText, departureMode === 'now' && styles.modeToggleTextActive]}>
+                ⚡ 今すぐ出発
+              </Text>
+              <Text style={[styles.modeToggleSub, departureMode === 'now' && styles.modeToggleSubActive]}>
+                現在の渋滞情報で計算
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeToggleBtn, departureMode === 'scheduled' && styles.modeToggleBtnActive]}
+              onPress={() => setDepartureMode('scheduled')}
+            >
+              <Text style={[styles.modeToggleText, departureMode === 'scheduled' && styles.modeToggleTextActive]}>
+                📅 日時指定
+              </Text>
+              <Text style={[styles.modeToggleSub, departureMode === 'scheduled' && styles.modeToggleSubActive]}>
+                出発時刻の予測渋滞で計算
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {departureMode === 'scheduled' && (
+            <>
+              <Text style={styles.planningSubLabel}>出発日</Text>
+              <View style={styles.departureDayRow}>
+                {(['今日', '明日', '明後日'] as const).map((label, offset) => (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.durationChip, departureDayOffset === offset && styles.durationChipSelected]}
+                    onPress={() => setDepartureDayOffset(offset)}
+                  >
+                    <Text style={[styles.durationText, departureDayOffset === offset && styles.durationTextSelected]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.planningSubLabel}>出発時間</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.durationScroll}
+              >
+                {[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((h) => (
+                  <TouchableOpacity
+                    key={h}
+                    style={[styles.durationChip, departureHour === h && styles.durationChipSelected]}
+                    onPress={() => setDepartureHour(h)}
+                  >
+                    <Text style={[styles.durationText, departureHour === h && styles.durationTextSelected]}>
+                      {h}時
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
+        </View>
+
         {/* Planning Mode + Duration/Distance */}
-        <View style={[styles.section, routeMode === 'destination' && styles.sectionDisabled]}
+        <View style={[styles.section, { backgroundColor: colors.cardBg }, routeMode === 'destination' && styles.sectionDisabled]}
               pointerEvents={routeMode === 'destination' ? 'none' : 'auto'}>
-          <Text style={[styles.sectionTitle, routeMode === 'destination' && styles.textDisabled]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }, routeMode === 'destination' && styles.textDisabled]}>
             📐 プランニング{routeMode === 'destination' ? '（目的地指定時は不使用）' : ''}
           </Text>
 
@@ -921,8 +1095,8 @@ export default function HomeScreen() {
         </View>
 
         {/* Return Type */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔄 帰り方</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🔄 帰り方</Text>
           <View style={styles.returnRow}>
             {[
               { value: 'none' as ReturnType, label: '帰りなし', icon: '→' },
@@ -961,7 +1135,7 @@ export default function HomeScreen() {
             {generating ? (
               <View style={styles.generatingContent}>
                 <ActivityIndicator size="small" color={COLORS.white} />
-                <Text style={styles.generateBtnText}>AIがルートを考えています...</Text>
+                <Text style={styles.generateBtnText}>{generatingLabel}</Text>
               </View>
             ) : (
               <Text style={styles.generateBtnText}>
@@ -994,11 +1168,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+    color: COLORS.textPrimary,
   },
   headerSubtitle: {
     fontSize: FONT_SIZE.sm,
-    color: 'rgba(255,255,255,0.8)',
+    color: COLORS.textLight,
     marginTop: 4,
   },
   scroll: {
@@ -1182,6 +1356,10 @@ const styles = StyleSheet.create({
   durationScroll: {
     gap: SPACING.sm,
     paddingRight: SPACING.lg,
+  },
+  departureDayRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
   },
   durationChip: {
     paddingHorizontal: SPACING.lg,

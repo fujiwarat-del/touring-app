@@ -101,8 +101,7 @@ export const DOW: Record<number, string> = {
 // ============================================================
 
 export const BIKE_TYPES: Array<{ value: BikeType; label: string; icon: string; description: string }> = [
-  { value: '大型', label: '大型', icon: '🏍️', description: '400cc以上' },
-  { value: '中型', label: '中型', icon: '🛵', description: '250-400cc' },
+  { value: '中型以上', label: '中型以上', icon: '🏍️', description: '125cc超・高速OK' },
   { value: 'オフロード', label: 'オフロード', icon: '🏔️', description: '林道OK' },
   { value: '小型125cc以下', label: '小型125cc以下', icon: '🛵', description: '高速道路不可' },
 ];
@@ -120,6 +119,7 @@ export const PURPOSES: Array<{ value: TouringPurpose; label: string; icon: strin
   { value: '道の駅', label: '道の駅', icon: '🏪' },
   { value: '絶景', label: '絶景', icon: '🗻' },
   { value: '林道', label: '林道', icon: '🌲' },
+  { value: '農道', label: '農道', icon: '🌾' },
   { value: 'キャンプ', label: 'キャンプ', icon: '🏕️' },
   { value: '湖・高原', label: '湖・高原', icon: '🏔️' },
   { value: '城・史跡', label: '城・史跡', icon: '🏯' },

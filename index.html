@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Click Action Mini Game - Single File</title>
+  <style>
+    /* --- ここに前回 style.css の内容をそのまま貼っています --- */
+    :root { --bg:#0f1226; --panel:#1c2140; --accent:#7fffd4; --accent-2:#ffdd57; --danger:#ff6b6b; --text:#eaf2ff; }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP",sans-serif;color:var(--text);
+      background:radial-gradient(1200px at 50% -200px,#1f2752 0%,var(--bg) 60%)}
+    .hud{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:8px;padding:10px 12px;background:rgba(28,33,64,.85);backdrop-filter:blur(4px);border-bottom:1px solid #2c3566}
+    .hud__item{display:flex;align-items:center;gap:8px}
+    .btn{background:var(--accent);color:#0a0a0a;border:none;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    .toggle{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+    .game-area{position:relative;width:min(860px,96vw);height:min(520px,70vh);margin:16px auto;border-radius:16px;
+      background:radial-gradient(600px at 50% 50%,#263065 0%,transparent 60%),linear-gradient(180deg,#151838,#0f1226);
+      box-shadow:0 20px 50px rgba(0,0,0,.45);overflow:hidden}
+    .target{position:absolute;width:70px;height:70px;border-radius:50%;display:grid;place-items:center;color:#0a0a0a;font-weight:900;
+      user-select:none;transform:translate(-50%,-50%);transition:transform 80ms ease-out;box-shadow:0 6px 16px rgba(0,0,0,.3);cursor:crosshair}
+    .target__ring{position:absolute;width:100%;height:100%;border:6px solid rgba(255,255,255,.35);border-radius:50%;animation:pulse 1s infinite ease-in-out}
+    @keyframes pulse{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.15);opacity:.4}}
+    .target--good{background:var(--accent)} .target--bad{background:var(--danger)} .target--rare{background:linear-gradient(135deg,#9efff1,#ffdd57)}
+    .message{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:rgba(234,242,255,.9);font-size:clamp(18px,4vw,28px);letter-spacing:.8px;pointer-events:none}
+    .pop{position:absolute;transform:translate(-50%,-50%);color:var(--text);font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,.5);animation:pop 700ms ease-out forwards}
+    @keyframes pop{0%{opacity:1;transform:translate(-50%,-60%) scale(1)}100%{opacity:0;transform:translate(-50%,-120%) scale(.8)}}
+    .footer{width:min(860px,96vw);margin:0 auto 24px;color:#cfe1ff;font-size:14px;line-height:1.6}
+    details summary{cursor:pointer}
+    @media (max-width:600px){.hud{grid-template-columns:repeat(2,1fr);row-gap:6px}.hud__item:last-child{grid-column:span 2}.game-area{height:60vh}}
+  </style>
+</head>
+<body>
+  <header class="hud">
+    <div class="hud__item">Score: <span id="score">0</span></div>
+    <div class="hud__item">Combo: <span id="combo">0</span></div>
+    <div class="hud__item">Time: <span id="time">60</span>s</div>
+    <div class="hud__item">
+      <button id="startBtn" class="btn">Start</button>
+      <button id="restartBtn" class="btn" disabled>Restart</button>
+    </div>
+    <div class="hud__item">
+      <label class="toggle"><input type="checkbox" id="muteToggle" /><span>Mute</span></label>
+    </div>
+  </header>
+
+  <main id="game" class="game-area" aria-label="Game area">
+    <div id="message" class="message">Tap the targets!</div>
+  </main>
+
+  <footer class="footer">
+    <details>
+      <summary>How to play / 操作説明</summary>
+      <ul>
+        <li>Startでゲーム開始。ターゲットをクリック/タップしてスコア加算。</li>
+        <li>連続ヒットでコンボ倍率アップ（最大×5）。ミスでコンボリセット。</li>
+        <li>時間経過で難易度が上がり、ターゲットが小さく速くなります。</li>
+        <li>Muteで効果音ON/OFF。Restartで再挑戦。</li>
+      </ul>
+    </details>
+  </footer>
+
+  <script>
+    /* --- ここに前回 script.js の内容をそのまま貼っています --- */
+    (() => {
+      const gameEl = document.getElementById('game');
+      const scoreEl = document.getElementById('score');
+      const comboEl = document.getElementById('combo');
+      const timeEl  = document.getElementById('time');
+      const startBtn = document.getElementById('startBtn');
+      const restartBtn = document.getElementById('restartBtn');
+      const muteToggle = document.getElementById('muteToggle');
+      const messageEl = document.getElementById('message');
+
+      let score = 0, combo = 0, timeLeft = 60, running = false;
+      let spawnTimer = 0, lastTs = 0, difficultyLevel = 0;
+      let targets = new Set(); let sfxEnabled = true;
+      let audioCtx;
+      function playBeep(freq=800,time=.05,gain=.05){ if(!sfxEnabled) return;
+        try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+          const osc=audioCtx.createOscillator(), g=audioCtx.createGain();
+          osc.type='square'; osc.frequency.value=freq; g.gain.value=gain;
+          osc.connect(g).connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime+time);
+        }catch(_){} }
+      const rand=(min,max)=>Math.random()*(max-min)+min;
+      const clamp=(v,min,max)=>Math.min(Math.max(v,min),max);
+      function setHUD(){ scoreEl.textContent=String(score); comboEl.textContent=String(combo); timeEl.textContent=String(Math.max(0,Math.floor(timeLeft))); }
+      function resetGame(){ score=0; combo=0; timeLeft=60; difficultyLevel=0; setHUD(); targets.forEach(el=>el.remove()); targets.clear(); messageEl.textContent='Tap the targets!'; }
+      function startGame(){ if(running) return; resetGame(); running=true; startBtn.disabled=true; restartBtn.disabled=true; lastTs=performance.now(); requestAnimationFrame(loop); }
+      function endGame(){ running=false; startBtn.disabled=false; restartBtn.disabled=false; messageEl.textContent=`Time up! Score: ${score} (Max combo ${combo})`; playBeep(300,.2,.08); }
+      function spawnTarget(){
+        const tSize=clamp(70-difficultyLevel*4,36,70);
+        const lifeMs=clamp(1300-difficultyLevel*70,650,1300);
+        const isBad=Math.random()<clamp(.10+difficultyLevel*.04,.10,.45);
+        const isRare=!isBad && Math.random()<.07;
+        const x=rand(tSize,gameEl.clientWidth-tSize);
+        const y=rand(tSize,gameEl.clientHeight-tSize);
+        const t=document.createElement('div');
+        t.className=`target ${isRare?'target--rare':(isBad?'target--bad':'target--good')}`;
+        t.style.left=`${x}px`; t.style.top=`${y}px`; t.style.width=`${tSize}px`; t.style.height=`${tSize}px`;
+        t.dataset.type=isBad?'bad':(isRare?'rare':'good'); t.dataset.expireAt=String(performance.now()+lifeMs);
+        const ring=document.createElement('div'); ring.className='target__ring'; t.appendChild(ring);
+        const label=document.createElement('span'); label.textContent=isBad?'X':(isRare?'★':'+'); t.appendChild(label);
+        t.addEventListener('pointerdown',(ev)=>{ ev.stopPropagation(); hitTarget(t); },{passive:true});
+        targets.add(t); gameEl.appendChild(t);
+      }
+      function hitTarget(t){
+        const kind=t.dataset.type; const rect=t.getBoundingClientRect();
+        const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+        const pop=document.createElement('div'); pop.className='pop'; let delta=0;
+        if(kind==='good'){ combo=Math.min(combo+1,999); const mult=1+Math.min(Math.floor(combo/5),4); delta=10*mult; score+=delta; playBeep(1000+mult*120,.04,.05); pop.textContent=`+${delta} (x${mult})`; messageEl.textContent=`Nice! Combo ${combo}`; }
+        else if(kind==='rare'){ combo=Math.min(combo+2,999); const mult=2+Math.min(Math.floor(combo/5),3); delta=35*mult; score+=delta; playBeep(1400,.06,.06); pop.textContent=`RARE +${delta} (x${mult})`; messageEl.textContent=`RARE! Combo ${combo}`; }
+        else { combo=0; delta=-15; score=Math.max(0,score+delta); playBeep(240,.08,.07); pop.textContent=`${delta}`; messageEl.textContent=`Oops! Combo reset`; }
+        setHUD();
+        const gx=cx-gameEl.getBoundingClientRect().left, gy=cy-gameEl.getBoundingClientRect().top;
+        pop.style.left=`${gx}px`; pop.style.top=`${gy}px`; gameEl.appendChild(pop); setTimeout(()=>pop.remove(),700);
+        t.remove(); targets.delete(t);
+      }
+      gameEl.addEventListener('pointerdown',(ev)=>{ if(!running) return; if(ev.target===gameEl){ combo=0; messageEl.textContent=`Miss! Combo reset`; setHUD(); playBeep(220,.06,.06); }},{passive:true});
+      function loop(ts){ if(!running) return; const dt=ts-lastTs; lastTs=ts;
+        timeLeft-=dt/1000; if(timeLeft<=0){ timeLeft=0; setHUD(); return endGame(); }
+        difficultyLevel=Math.floor((60-timeLeft)/6);
+        spawnTimer+=dt; const baseInterval=650; const interval=clamp(baseInterval-difficultyLevel*40,280,baseInterval);
+        if(spawnTimer>=interval){ spawnTimer=0; const count=1+Math.floor(difficultyLevel/3); for(let i=0;i<count;i++) spawnTarget(); }
+        const now=ts; targets.forEach(t=>{ const expireAt=Number(t.dataset.expireAt||now); if(expireAt<=now){ t.remove(); targets.delete(t); } else { if(difficultyLevel>=5){ const j=Math.sin(now/60+Math.random())*1.2; t.style.transform=`translate(-50%, calc(-50% + ${j}px))`; } } });
+        setHUD(); requestAnimationFrame(loop);
+      }
+      startBtn.addEventListener('click', startGame);
+      restartBtn.addEventListener('click', () => { resetGame(); startGame(); });
+      muteToggle.addEventListener('change', (e) => { sfxEnabled = !e.target.checked; });
+      window.addEventListener('contextmenu',(e)=>{ if(e.target.classList && e.target.classList.contains('target')) e.preventDefault(); });
+    })();
+  </script>
+</body>
+</html>
+
+

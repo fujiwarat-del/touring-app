@@ -23,10 +23,16 @@ function getAdminDb() {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-app-key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // App key check（勝手なプッシュ通知送信を防ぐ / APP_API_KEY 設定時のみ強制）
+  const expectedAppKey = process.env.APP_API_KEY;
+  if (expectedAppKey && req.headers['x-app-key'] !== expectedAppKey) {
+    return res.status(401).json({ error: '認証エラー', code: 'UNAUTHORIZED' });
+  }
 
   const { recipientUid, actorName, postName } = req.body ?? {};
   if (!recipientUid || !actorName || !postName) {

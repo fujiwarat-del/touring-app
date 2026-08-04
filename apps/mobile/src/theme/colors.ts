@@ -19,26 +19,26 @@ export const COLORS = {
   info: '#2196F3',
   infoLight: '#E3F2FD',
 
-  // Neutral
+  // Neutral（白ベースミニマル: 無彩色）
   white: '#FFFFFF',
-  background: '#F5F7F5',
+  background: '#FAFAFA',
   cardBg: '#FFFFFF',
-  border: '#E0E8E4',
-  borderLight: '#F0F4F2',
+  border: '#DBDBDB',
+  borderLight: '#EFEFEF',
 
-  // Text
-  textPrimary: '#1A2E25',
-  textSecondary: '#4A6B5A',
-  textLight: '#8AA898',
-  textMuted: '#B0C8BC',
+  // Text（無彩色）
+  textPrimary: '#111111',
+  textSecondary: '#555555',
+  textLight: '#8E8E8E',
+  textMuted: '#B5B5B5',
 
   // Stars
   starFilled: '#F0A500',
-  starEmpty: '#E0E8E4',
+  starEmpty: '#DBDBDB',
 
   // Tab bar
   tabActive: '#1D9E75',
-  tabInactive: '#8AA898',
+  tabInactive: '#9A9A9A',
 
   // Traffic levels
   trafficLow: '#1D9E75',
@@ -48,10 +48,10 @@ export const COLORS = {
   trafficHigh: '#D63B3B',
 
   // Bike type chips
-  chipBg: '#F0F7F4',
+  chipBg: '#F4F4F4',
   chipSelected: '#1D9E75',
   chipSelectedText: '#FFFFFF',
-  chipText: '#4A6B5A',
+  chipText: '#555555',
 
   // Overlay
   overlay: 'rgba(0,0,0,0.4)',

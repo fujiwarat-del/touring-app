@@ -92,7 +92,7 @@ export interface UserProfile {
 // Enums / Union Types
 // ============================================================
 
-export type BikeType = '大型' | '中型' | 'オフロード' | '小型125cc以下';
+export type BikeType = '中型以上' | 'オフロード' | '小型125cc以下';
 
 export type TouringPurpose =
   | 'ワインディング'
@@ -103,6 +103,7 @@ export type TouringPurpose =
   | '道の駅'
   | '絶景'
   | '林道'
+  | '農道'
   | 'キャンプ'
   | '湖・高原'
   | '城・史跡';
@@ -142,6 +143,7 @@ export interface GenerateRouteRequest {
   weatherInfo?: WeatherInfo;
   planningMode?: PlanningMode;     // 'time'（デフォルト） or 'distance'
   targetDistanceKm?: number;       // 距離モード時のみ（km）
+  departureTime?: string;          // 出発予定日時（ISO 8601）。未指定=今すぐ出発
 }
 
 export interface GenerateRouteResponse {

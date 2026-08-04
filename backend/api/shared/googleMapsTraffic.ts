@@ -21,12 +21,24 @@ export interface TrafficRouteResult {
 /**
  * Google Maps Routes API でリアルタイム渋滞を考慮したルートを取得する
  * @param waypoints 経由地の配列（最初が出発地、最後が目的地）
+ * @param departureTime 出発予定日時（ISO 8601）。未来の日時を渡すと Google の
+ *   過去データに基づく予測渋滞で計算される。未指定=今すぐ出発
  * @returns TrafficRouteResult | null（API未設定 or エラー時は null）
  */
 export async function getTrafficAwareRoute(
-  waypoints: LatLng[]
+  waypoints: LatLng[],
+  departureTime?: string
 ): Promise<TrafficRouteResult | null> {
   if (!GOOGLE_MAPS_API_KEY || waypoints.length < 2) return null;
+
+  // 出発予定日時の検証：過去または不正な値は「2分後」にフォールバック
+  let effectiveDeparture = new Date(Date.now() + 2 * 60 * 1000);
+  if (departureTime) {
+    const parsed = new Date(departureTime);
+    if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+      effectiveDeparture = parsed;
+    }
+  }
 
   const origin = waypoints[0];
   const destination = waypoints[waypoints.length - 1];
@@ -44,9 +56,9 @@ export async function getTrafficAwareRoute(
     })),
     travelMode: 'DRIVE',
     routingPreference: 'TRAFFIC_AWARE',
-    departureTime: new Date(Date.now() + 2 * 60 * 1000).toISOString(), // 2分後（現在時刻だとサーバー側で過去扱いされるため）
+    departureTime: effectiveDeparture.toISOString(),
     routeModifiers: {
-      avoidFerries: false,  // フェリーは許可（ユーザーが意図的に使う場合あり）
+      avoidFerries: true,  // フェリー移動を除外（Claudeのルート生成もフェリー禁止のため統一）
       avoidTolls: false,
     },
   };
@@ -119,8 +131,9 @@ export async function getTrafficAwareRoute(
  * 秒数を「約X時間Y分」形式に変換
  */
 export function formatDurationSec(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
+  let h = Math.floor(seconds / 3600);
+  let m = Math.round((seconds % 3600) / 60);
+  if (m === 60) { h += 1; m = 0; } // 丸めで60分になった場合は繰り上げ（「1時間60分」防止）
   if (h === 0) return `約${m}分`;
   if (m === 0) return `約${h}時間`;
   return `約${h}時間${m}分`;

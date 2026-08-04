@@ -9,14 +9,24 @@ import {
   Alert,
   SafeAreaView,
   RefreshControl,
+  Share,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
 import type { Route } from '@touring/shared';
+import { makeMapUrl } from '@touring/shared';
+import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 import { RouteCard } from '../components/RouteCard';
 import { loadSavedRoutes, deleteSavedRoute } from '../services/firebase';
 
+type NavProp = StackNavigationProp<RootStackParamList>;
+
 export default function SavedScreen() {
+  const { colors } = useTheme();
+  const navigation = useNavigation<NavProp>();
   const [savedRoutes, setSavedRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,6 +52,23 @@ export default function SavedScreen() {
     loadRoutes();
   };
 
+  // ルートを共有（共有シートから「コピー」も選択可能）
+  const handleShare = useCallback(async (route: Route) => {
+    try {
+      const mapUrl = (route as any).mapUrl ?? makeMapUrl(route);
+      await Share.share({
+        title: route.name,
+        message:
+          `🏍️ ${route.name}\n${route.description}\n\n` +
+          `📏 ${route.distance} | ⏱️ ${route.time} | ⚡ ${route.difficulty}\n\n` +
+          `🗺️ ルートを開く:\n${mapUrl}\n\n` +
+          `ツーリングプランナーで作成`,
+      });
+    } catch {
+      // ユーザーがキャンセル
+    }
+  }, []);
+
   const handleDelete = (route: Route) => {
     if (!route.id) return;
     Alert.alert(
@@ -66,11 +93,11 @@ export default function SavedScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>⭐ 保存済みルート</Text>
-        <Text style={styles.headerSubtitle}>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>⭐ 保存済みルート</Text>
+        <Text style={[styles.headerSubtitle, { color: colors.textLight }]}>
           {savedRoutes.length}件のルートが保存されています
         </Text>
       </View>
@@ -107,6 +134,13 @@ export default function SavedScreen() {
                 index={i}
                 isSaved={true}
                 onSave={() => handleDelete(route)}
+                onShare={handleShare}
+                onShowMap={(r) =>
+                  navigation.navigate('RouteMap', {
+                    routeData: { name: r.name, waypointObjects: r.waypointObjects },
+                    mapUrl: r.mapUrl,
+                  })
+                }
                 showActions={true}
               />
               <TouchableOpacity
@@ -135,11 +169,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: FONT_SIZE.xxl,
     fontWeight: FONT_WEIGHT.bold,
-    color: COLORS.white,
+    color: COLORS.textPrimary,
   },
   headerSubtitle: {
     fontSize: FONT_SIZE.sm,
-    color: 'rgba(255,255,255,0.8)',
+    color: COLORS.textLight,
     marginTop: 4,
   },
   scroll: { flex: 1 },

@@ -25,6 +25,8 @@ export interface Route {
   createdAt?: string;
   userId?: string;
   isSaved?: boolean;
+  distanceVerified?: boolean; // Google Maps Routes API で距離・時間を検証済み
+  trafficRatio?: number;      // 渋滞込み時間 ÷ 通常時間（1.0=渋滞なし）
 }
 
 export interface TodayInfo {
@@ -53,8 +55,20 @@ export interface WeatherInfo {
 }
 
 export type BikeType = '大型' | '中型' | 'オフロード' | '小型125cc以下';
-export type TouringPurpose = 'ワインディング' | '温泉' | '海沿い' | 'グルメ' | '道の駅' | '絶景' | '林道';
-export type RidingPreference = '信号少な目' | '高速使わない' | '峠道' | '下道' | '川沿い';
+export type TouringPurpose =
+  | 'ワインディング'
+  | '温泉'
+  | '海沿い'
+  | '川沿い'
+  | 'グルメ'
+  | '道の駅'
+  | '絶景'
+  | '林道'
+  | '農道'
+  | 'キャンプ'
+  | '湖・高原'
+  | '城・史跡';
+export type RidingPreference = '信号少な目' | '高速使わない' | '峠道';
 export type RouteMode = 'free' | 'destination';
 export type ReturnType = 'none' | 'loop' | 'same' | 'different';
 export type Duration = 30 | 60 | 90 | 120 | 150 | 180 | 240 | 300 | 360;
@@ -77,6 +91,19 @@ export interface CommunityPost {
 
 export type PlanningMode = 'time' | 'distance';
 
+export interface TrafficSpot {
+  lat: number;
+  lng: number;
+  volumePer5min: number;
+}
+
+export interface JarticCongestion {
+  busySpots: TrafficSpot[];
+  quietSpots: TrafficSpot[];
+  sensorCount: number;
+  timeCode: string;
+}
+
 export interface GenerateRouteRequest {
   lat: number;
   lng: number;
@@ -95,4 +122,6 @@ export interface GenerateRouteRequest {
   weatherInfo?: WeatherInfo;
   planningMode?: PlanningMode;     // 'time'（デフォルト） or 'distance'
   targetDistanceKm?: number;       // 距離モード時のみ（km）
+  departureTime?: string;          // 出発予定日時（ISO 8601）。未指定=今すぐ出発
+  jarticInfo?: JarticCongestion;   // JARTIC リアルタイム交通量（オプション）
 }

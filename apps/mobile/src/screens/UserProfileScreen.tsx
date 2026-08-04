@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Linking,
   Image,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -19,12 +20,14 @@ import { BIKE_TYPES } from '@touring/shared';
 import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 import {
   getUserPosts,
   getUserPostStats,
   getUserBikesFromFirestore,
   getUserPhotoUrl,
   ensureAnonymousAuth,
+  blockUser,
 } from '../services/firebase';
 import type { BikeRecord } from '../services/firebase';
 import { getAllBadgesWithStatus } from '../utils/badges';
@@ -34,7 +37,8 @@ type RouteProps = RouteProp<RootStackParamList, 'UserProfile'>;
 type NavProp = StackNavigationProp<RootStackParamList>;
 
 export default function UserProfileScreen() {
-  useNavigation<NavProp>();
+  const { colors } = useTheme();
+  const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteProps>();
   const { userId, displayName } = route.params;
 
@@ -80,14 +84,14 @@ export default function UserProfileScreen() {
   const earnedBadges = getAllBadgesWithStatus(stats).filter((b) => b.earned);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* User header card */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, { backgroundColor: colors.cardBg }]}>
           {photoUrl ? (
             <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
           ) : (
@@ -105,6 +109,34 @@ export default function UserProfileScreen() {
               </View>
             )}
           </View>
+
+          {/* ブロックボタン（他ユーザーのみ・App Store UGC要件） */}
+          {!isOwnProfile && myUid && (
+            <TouchableOpacity
+              style={styles.blockBtn}
+              onPress={() => {
+                Alert.alert(
+                  'ユーザーをブロック',
+                  `${displayName} さんの投稿が今後表示されなくなります。よろしいですか？`,
+                  [
+                    { text: 'キャンセル', style: 'cancel' },
+                    {
+                      text: 'ブロックする',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await blockUser(userId);
+                        Alert.alert('ブロックしました', 'このユーザーの投稿は表示されなくなりました。', [
+                          { text: 'OK', onPress: () => navigation.goBack() },
+                        ]);
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.blockBtnText}>🚫 ブロック</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Stats */}
           {statsLoading ? (
@@ -131,7 +163,7 @@ export default function UserProfileScreen() {
 
         {/* Badges */}
         {earnedBadges.length > 0 && (
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.sectionTitle}>🏅 獲得バッジ</Text>
             <View style={styles.badgesWrap}>
               {earnedBadges.map((badge) => (
@@ -150,7 +182,7 @@ export default function UserProfileScreen() {
         )}
 
         {/* Bikes */}
-        <View style={styles.section}>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
           <Text style={styles.sectionTitle}>🏍️ マイバイク</Text>
           {bikes.length === 0 ? (
             <Text style={styles.emptyText}>バイク情報が登録されていません</Text>
@@ -182,7 +214,7 @@ export default function UserProfileScreen() {
         </View>
 
         {/* Posts */}
-        <View style={styles.section}>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
           <Text style={styles.sectionTitle}>
             🗺️ 投稿したルート（{stats.postCount}件）
           </Text>
@@ -317,6 +349,19 @@ const styles = StyleSheet.create({
   meBadgeText: {
     fontSize: FONT_SIZE.xs,
     color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  blockBtn: {
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: '#E53E3E',
+  },
+  blockBtnText: {
+    fontSize: FONT_SIZE.sm,
+    color: '#E53E3E',
     fontWeight: FONT_WEIGHT.bold,
   },
   statsRow: {

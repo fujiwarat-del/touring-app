@@ -69,6 +69,11 @@ ios/
 local.properties
 buck-out/
 
+# Secrets（万一リポジトリ内に置かれても追跡しない）
+*firebase-adminsdk*.json
+*秘密鍵*/
+service-account*.json
+
 # Vercel
 .vercel/
 

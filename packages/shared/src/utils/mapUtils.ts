@@ -13,10 +13,23 @@ import type { WaypointObject, Route } from '../types/index';
  * - プロンプトでゼロ埋め架空座標（35.5000000等）を禁止済みのため信頼できる
  * - travelmode=driving でドライブモード固定
  */
-export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
-  const waypoints = route.waypointObjects;
+/** 有効な座標かチェック（null/undefined/0,0/NaN を弾く） */
+function isValidCoord(lat: number | undefined | null, lng: number | undefined | null): boolean {
+  return (
+    lat != null && lng != null &&
+    !isNaN(lat) && !isNaN(lng) &&
+    !(lat === 0 && lng === 0) &&
+    Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+  );
+}
 
-  if (!waypoints || waypoints.length === 0) {
+export function makeMapUrl(route: Route, startLat?: number, startLng?: number): string {
+  // 有効な座標を持つウェイポイントのみ使用
+  const waypoints = (route.waypointObjects ?? []).filter(
+    (wp) => isValidCoord(wp.lat, wp.lng)
+  );
+
+  if (waypoints.length === 0) {
     if (startLat != null && startLng != null) {
       return `https://www.google.com/maps/search/?api=1&query=${startLat},${startLng}`;
     }
@@ -29,7 +42,8 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
   }
 
   // 出発地：GPS座標（実際の現在地）を優先
-  const origin = (startLat != null && startLng != null)
+  const validStart = isValidCoord(startLat, startLng);
+  const origin = validStart
     ? `${startLat},${startLng}`
     : `${waypoints[0].lat},${waypoints[0].lng}`;
 
@@ -38,7 +52,7 @@ export function makeMapUrl(route: Route, startLat?: number, startLng?: number): 
   const destStr = `${destination.lat},${destination.lng}`;
 
   // 中間経由地：座標指定・最大8か所
-  const intermediateWps = (startLat != null && startLng != null
+  const intermediateWps = (validStart
     ? waypoints.slice(1, -1)
     : waypoints.slice(0, -1)
   ).slice(0, 8);

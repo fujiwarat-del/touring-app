@@ -15,8 +15,10 @@ import type { RouteProp } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import type { WaypointObject } from '@touring/shared';
+import { makeMapUrl } from '@touring/shared';
 import { COLORS } from '../theme/colors';
 import { FONT_SIZE, FONT_WEIGHT, SPACING, RADIUS } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 
 type MapRouteProps = RouteProp<RootStackParamList, 'RouteMap'>;
 type NavProp = StackNavigationProp<RootStackParamList, 'RouteMap'>;
@@ -127,9 +129,10 @@ function buildMapHtml(waypoints: WaypointObject[], routeName: string): string {
 }
 
 export default function RouteMapScreen() {
+  const { colors } = useTheme();
   const navigation = useNavigation<NavProp>();
   const route = useRoute<MapRouteProps>();
-  const { routeData, mapUrl } = route.params;
+  const { routeData, mapUrl, startLat, startLng } = route.params;
   const webviewRef = useRef<WebView>(null);
   const [loadError, setLoadError] = useState(false);
   const [webviewKey, setWebviewKey] = useState(0);
@@ -137,9 +140,14 @@ export default function RouteMapScreen() {
   const waypoints = [...(routeData.waypointObjects ?? [])];
   const html = buildMapHtml(waypoints, routeData.name);
 
+  // AIルートは mapUrl を持たないため、waypointObjects から動的に生成する
+  const effectiveMapUrl = mapUrl ?? (waypoints.length > 0
+    ? makeMapUrl({ waypointObjects: waypoints } as any, startLat, startLng)
+    : undefined);
+
   const handleOpenGoogleMaps = () => {
-    if (mapUrl) {
-      Linking.openURL(mapUrl).catch(() => {
+    if (effectiveMapUrl) {
+      Linking.openURL(effectiveMapUrl).catch(() => {
         Alert.alert('エラー', 'Google Mapsを開けませんでした');
       });
     }
@@ -151,7 +159,7 @@ export default function RouteMapScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {waypoints.length > 0 ? (
         loadError ? (
           <View style={styles.noData}>
@@ -194,10 +202,17 @@ export default function RouteMapScreen() {
         </View>
       )}
 
-      {mapUrl && (
-        <TouchableOpacity style={styles.gmapsBtn} onPress={handleOpenGoogleMaps}>
-          <Text style={styles.gmapsBtnText}>🗺️ Google Maps で開く</Text>
-        </TouchableOpacity>
+      {effectiveMapUrl && (
+        <>
+          <View style={styles.gmapsNote}>
+            <Text style={styles.gmapsNoteText}>
+              💡 Google Maps が徒歩で開いた場合は 🚗 をタップして切り替えてください
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.gmapsBtn} onPress={handleOpenGoogleMaps}>
+            <Text style={styles.gmapsBtnText}>🗺️ Google Maps で開く</Text>
+          </TouchableOpacity>
+        </>
       )}
     </SafeAreaView>
   );
@@ -258,5 +273,20 @@ const styles = StyleSheet.create({
   },
   gmapsBtnText: {
     color: '#fff', fontSize: FONT_SIZE.md, fontWeight: FONT_WEIGHT.bold,
+  },
+  gmapsNote: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.xs,
+    backgroundColor: '#FEF3CD',
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F0A500',
+  },
+  gmapsNoteText: {
+    fontSize: FONT_SIZE.xs,
+    color: '#7A5000',
+    lineHeight: 18,
   },
 });

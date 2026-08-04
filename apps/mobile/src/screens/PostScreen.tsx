@@ -14,14 +14,17 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import type { RootStackParamList } from '../../App';
 import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
+import { useTheme } from '../theme/ThemeContext';
 import { uploadPhotos } from '../services/cloudinaryService';
-import { postCommunityRoute } from '../services/firebase';
+import { postCommunityRoute, hasAcceptedUgcTerms, acceptUgcTerms } from '../services/firebase';
 import { PREFECTURES_BY_AREA } from '@touring/shared';
 
-const MAX_PHOTOS = 5;
+const MAX_PHOTOS = 10;
 
 const DEPARTURE_AREAS = [
   '北海道', '東北', '関東', '中部', '近畿', '中国', '四国', '九州・沖縄',
@@ -31,16 +34,32 @@ const PRESET_TAGS = [
   'ワインディング', '絶景', '温泉', '海沿い', 'グルメ', '道の駅', '峠', '高速ツーリング',
 ];
 
-export default function PostScreen() {
-  const navigation = useNavigation();
+/** 都道府県名から所属エリアを逆引き */
+function findAreaOfPrefecture(pref: string): string {
+  for (const [area, prefs] of Object.entries(PREFECTURES_BY_AREA)) {
+    if (prefs.includes(pref)) return area;
+  }
+  return '';
+}
 
-  const [routeName, setRouteName] = useState('');
+export default function PostScreen() {
+  const { colors } = useTheme();
+  const navigation = useNavigation();
+  const route = useRoute<RouteProp<RootStackParamList, 'Post'>>();
+  // アルバムからの転載時はタイトル・メモ・写真・都道府県がプレフィルされる
+  const prefill = route.params?.prefill;
+  const prefillArea = prefill?.prefectures?.[0] ? findAreaOfPrefecture(prefill.prefectures[0]) : '';
+
+  const [routeName, setRouteName] = useState(prefill?.routeName ?? '');
   const [mapUrl, setMapUrl] = useState('');
-  const [comment, setComment] = useState('');
-  const [departureArea, setDepartureArea] = useState('');
-  const [selectedPrefectures, setSelectedPrefectures] = useState<string[]>([]);
+  const [comment, setComment] = useState(prefill?.comment ?? '');
+  const [departureArea, setDepartureArea] = useState(prefillArea);
+  // 都道府県ピッカーの表示地域（出発エリアとは独立。地域をまたぐロンツーに対応）
+  const [prefArea, setPrefArea] = useState(prefillArea);
+  const [selectedPrefectures, setSelectedPrefectures] = useState<string[]>(prefill?.prefectures ?? []);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [photos, setPhotos] = useState<string[]>([]);
+  // photos には ローカルURI（新規選択）と https URL（アルバムのアップロード済み写真）が混在しうる
+  const [photos, setPhotos] = useState<string[]>(prefill?.photoUrls?.slice(0, MAX_PHOTOS) ?? []);
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
 
@@ -98,8 +117,8 @@ export default function PostScreen() {
 
   const handleAreaSelect = (area: string) => {
     setDepartureArea(area);
-    // エリアが変わったら都道府県選択をリセット
-    setSelectedPrefectures([]);
+    // 都道府県ピッカーの表示地域も追従させる（選択済みの県はリセットしない）
+    setPrefArea(area);
   };
 
   const handlePost = useCallback(async () => {
@@ -116,13 +135,38 @@ export default function PostScreen() {
       return;
     }
 
+    // 初回投稿時にコミュニティガイドラインへの同意を求める（App Store UGC要件）
+    if (!(await hasAcceptedUgcTerms())) {
+      const agreed = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'コミュニティガイドライン',
+          '投稿の前に以下にご同意ください。\n\n' +
+            '・不適切な画像・誹謗中傷・スパム等の投稿は禁止です\n' +
+            '・違反投稿は予告なく削除され、アカウントが停止される場合があります\n' +
+            '・他のユーザーの投稿は通報・ブロックできます\n' +
+            '・通報された投稿は運営が24時間以内に確認・対応します',
+          [
+            { text: 'キャンセル', style: 'cancel', onPress: () => resolve(false) },
+            { text: '同意して投稿する', onPress: () => resolve(true) },
+          ],
+          { cancelable: true, onDismiss: () => resolve(false) }
+        );
+      });
+      if (!agreed) return;
+      await acceptUgcTerms();
+    }
+
     setPosting(true);
     try {
-      // Upload photos to Cloudinary
+      // 写真のアップロード：アルバム転載分（https URL）は再アップロード不要でそのまま使用、
+      // 端末から新規選択したローカルURIのみ Cloudinary にアップロードする
       let uploadedUrls: string[] = [];
       if (photos.length > 0) {
         setUploading(true);
-        uploadedUrls = await uploadPhotos(photos);
+        const localUris = photos.filter((p) => !p.startsWith('http'));
+        const uploaded = await uploadPhotos(localUris);
+        let uploadIdx = 0;
+        uploadedUrls = photos.map((p) => (p.startsWith('http') ? p : uploaded[uploadIdx++]));
         setUploading(false);
       }
 
@@ -166,7 +210,7 @@ export default function PostScreen() {
   }, [routeName, mapUrl, comment, departureArea, selectedPrefectures, selectedTags, photos, navigation]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -177,7 +221,7 @@ export default function PostScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Route Name */}
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.label}>🏍️ ルート名 *</Text>
             <TextInput
               style={styles.input}
@@ -190,7 +234,7 @@ export default function PostScreen() {
           </View>
 
           {/* Google Maps URL */}
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.label}>🗺️ Google Maps 共有URL *</Text>
             <Text style={styles.hint}>
               Google マップでルートを作成 → 共有 → リンクをコピー
@@ -208,7 +252,7 @@ export default function PostScreen() {
           </View>
 
           {/* Comment */}
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.label}>💬 コメント</Text>
             <TextInput
               style={[styles.input, styles.commentInput]}
@@ -223,7 +267,7 @@ export default function PostScreen() {
           </View>
 
           {/* Departure Area */}
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.label}>📍 出発エリア *</Text>
             <View style={styles.chipRow}>
               {DEPARTURE_AREAS.map((area) => (
@@ -239,14 +283,31 @@ export default function PostScreen() {
               ))}
             </View>
 
-            {/* 都道府県（エリア選択後に展開） */}
-            {departureArea && PREFECTURES_BY_AREA[departureArea] && (
+            {/* 都道府県（エリア選択後に展開。地域タブで全国から選択可＝地域またぎロンツー対応） */}
+            {departureArea && prefArea && PREFECTURES_BY_AREA[prefArea] && (
               <View style={styles.prefectureSection}>
                 <View style={styles.prefectureLabelRow}>
                   <Text style={styles.prefectureLabel}>🗾 通過する都道府県（複数選択可・任意）</Text>
                 </View>
+                {/* 地域切替タブ（出発エリアとは独立。切り替えても選択は維持される） */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.prefAreaTabs}>
+                  {DEPARTURE_AREAS.map((area) => {
+                    const hasSelection = (PREFECTURES_BY_AREA[area] ?? []).some((p) => selectedPrefectures.includes(p));
+                    return (
+                      <TouchableOpacity
+                        key={area}
+                        style={[styles.prefAreaTab, prefArea === area && styles.prefAreaTabActive]}
+                        onPress={() => setPrefArea(area)}
+                      >
+                        <Text style={[styles.prefAreaTabText, prefArea === area && styles.prefAreaTabTextActive]}>
+                          {area}{hasSelection ? ' ✓' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
                 <View style={styles.chipRow}>
-                  {PREFECTURES_BY_AREA[departureArea].map((pref) => (
+                  {PREFECTURES_BY_AREA[prefArea].map((pref) => (
                     <TouchableOpacity
                       key={pref}
                       style={[styles.chip, styles.prefChip, selectedPrefectures.includes(pref) && styles.prefChipSelected]}
@@ -268,7 +329,7 @@ export default function PostScreen() {
           </View>
 
           {/* Tags */}
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.label}>🏷️ タグ（複数選択可）</Text>
             <View style={styles.chipRow}>
               {PRESET_TAGS.map((tag) => (
@@ -286,7 +347,7 @@ export default function PostScreen() {
           </View>
 
           {/* Photos */}
-          <View style={styles.section}>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
             <Text style={styles.label}>📷 写真（最大{MAX_PHOTOS}枚）</Text>
             <View style={styles.photoRow}>
               {photos.map((uri, i) => (
@@ -426,6 +487,28 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.sm,
     fontWeight: FONT_WEIGHT.semiBold,
     color: COLORS.textSecondary,
+  },
+  prefAreaTabs: {
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  prefAreaTab: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginRight: SPACING.xs,
+  },
+  prefAreaTabActive: {
+    backgroundColor: COLORS.primary,
+  },
+  prefAreaTabText: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHT.semiBold,
+  },
+  prefAreaTabTextActive: {
+    color: '#fff',
   },
   prefChip: {
     borderColor: '#1A7A4A30',

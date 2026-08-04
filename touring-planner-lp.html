@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ツーリングプランナー | クローズドβテスト参加者募集</title>
+  <meta name="description" content="AIがあなたに合ったツーリングルートを提案。まだ知らない道や絶景スポットとの出会いを。クローズドβテスト参加者募集中！">
+  <style>
+    :root {
+      --primary:      #1D9E75;
+      --primary-dark: #157A5B;
+      --primary-light:#E8F8F3;
+      --primary-mid:  #2BB88A;
+      --text:         #1A2E25;
+      --text-sub:     #4A6B5A;
+      --text-muted:   #8AA898;
+      --bg:           #F5F7F5;
+      --white:        #FFFFFF;
+      --border:       #E0E8E4;
+      --shadow:       0 4px 24px rgba(29,158,117,0.10);
+      --shadow-lg:    0 8px 40px rgba(29,158,117,0.16);
+      --radius:       16px;
+      --radius-sm:    10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ── ヘッダー ── */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      font-size: 1.1rem; font-weight: 800; color: var(--primary);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .header-cta {
+      background: var(--primary); color: #fff;
+      padding: 8px 20px; border-radius: 999px;
+      font-size: 0.85rem; font-weight: 700;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .header-cta:hover { background: var(--primary-dark); }
+
+    /* ── ヒーロー ── */
+    .hero {
+      background: linear-gradient(135deg, #0f3d2a 0%, #1D9E75 50%, #2dd4a0 100%);
+      color: #fff;
+      padding: 80px 24px 100px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      padding: 4px 16px; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 700;
+      margin-bottom: 24px; letter-spacing: 0.05em;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 900; line-height: 1.25;
+      margin-bottom: 20px;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .hero h1 em { font-style: normal; color: #a8ffd8; }
+    .hero-sub {
+      font-size: clamp(1rem, 2.5vw, 1.2rem);
+      opacity: 0.9; max-width: 580px; margin: 0 auto 40px;
+    }
+    .hero-cta {
+      display: inline-block;
+      background: #fff; color: var(--primary);
+      padding: 16px 40px; border-radius: 999px;
+      font-size: 1.1rem; font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .hero-cta:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+    .hero-note { margin-top: 16px; font-size: 0.82rem; opacity: 0.7; }
+
+    /* ── セクション共通 ── */
+    section { padding: 80px 24px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .section-label {
+      display: inline-block;
+      background: var(--primary-light); color: var(--primary);
+      padding: 4px 14px; border-radius: 999px;
+      font-size: 0.78rem; font-weight: 700; margin-bottom: 16px;
+    }
+    h2 {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 900; color: var(--text);
+      margin-bottom: 12px; line-height: 1.35;
+    }
+    .section-lead {
+      font-size: 1.05rem; color: var(--text-sub);
+      max-width: 600px; margin-bottom: 48px;
+    }
+
+    /* ── 特徴カード ── */
+    .features { background: var(--white); }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      border: 1.5px solid var(--border);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+    .feature-icon { font-size: 2.2rem; margin-bottom: 14px; }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+    .feature-card p  { font-size: 0.88rem; color: var(--text-sub); line-height: 1.65; }
+
+    /* ── こんな人に ── */
+    .recommend { background: var(--primary-light); }
+    .recommend-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .recommend-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex; align-items: flex-start; gap: 14px;
+      box-shadow: var(--shadow);
+    }
+    .recommend-check {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 900; flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .recommend-card p { font-size: 0.92rem; color: var(--text); font-weight: 600; line-height: 1.55; }
+    .recommend-card span { display: block; font-size: 0.8rem; color: var(--text-sub); font-weight: 400; margin-top: 2px; }
+
+    /* ── CBT説明 ── */
+    .cbt { background: var(--white); }
+    .honest-box {
+      background: linear-gradient(135deg, var(--primary-light), #fff);
+      border: 2px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 40px;
+    }
+    .honest-box h3 { font-size: 1.1rem; font-weight: 800; color: var(--primary); margin-bottom: 10px; }
+    .honest-box p  { font-size: 0.95rem; color: var(--text-sub); line-height: 1.8; }
+    .benefits-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .benefit-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: var(--bg); border-radius: var(--radius-sm);
+      padding: 16px 18px;
+    }
+    .benefit-icon { font-size: 1.4rem; flex-shrink: 0; }
+    .benefit-item p { font-size: 0.88rem; color: var(--text); font-weight: 600; line-height: 1.55; }
+
+    /* ── フォーム ── */
+    .form-section {
+      background: linear-gradient(135deg, #0f3d2a 0%, #1D9E75 100%);
+      color: #fff;
+    }
+    .form-section h2  { color: #fff; }
+    .form-section .section-label { background: rgba(255,255,255,0.2); color: #fff; }
+    .form-section .section-lead  { color: rgba(255,255,255,0.85); }
+    .form-box {
+      background: rgba(255,255,255,0.1);
+      border: 1.5px solid rgba(255,255,255,0.25);
+      backdrop-filter: blur(8px);
+      border-radius: var(--radius);
+      padding: 36px;
+      max-width: 500px;
+    }
+    .form-box label {
+      display: block; font-size: 0.85rem; font-weight: 700;
+      margin-bottom: 8px; opacity: 0.9;
+    }
+    .form-box input[type="email"] {
+      width: 100%; padding: 14px 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.15);
+      border-radius: var(--radius-sm);
+      color: #fff; font-size: 1rem;
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-box input[type="email"]::placeholder { color: rgba(255,255,255,0.5); }
+    .form-box input[type="email"]:focus { border-color: rgba(255,255,255,0.8); }
+
+    .form-bike-label {
+      font-size: 0.85rem; font-weight: 700; opacity: 0.9; margin-bottom: 10px; display: block;
+    }
+    .bike-options {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;
+    }
+    .bike-option {
+      background: rgba(255,255,255,0.15);
+      border: 1.5px solid rgba(255,255,255,0.3);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 0.82rem; color: #fff; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .bike-option:hover,
+    .bike-option.selected {
+      background: rgba(255,255,255,0.35);
+      border-color: rgba(255,255,255,0.8);
+    }
+    .form-box textarea {
+      width: 100%; padding: 12px 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.15);
+      border-radius: var(--radius-sm);
+      color: #fff; font-size: 0.9rem;
+      resize: vertical; min-height: 80px;
+      margin-bottom: 20px; font-family: inherit;
+      outline: none;
+    }
+    .form-box textarea::placeholder { color: rgba(255,255,255,0.5); }
+    .submit-btn {
+      width: 100%; padding: 16px;
+      background: #fff; color: var(--primary);
+      border: none; border-radius: 999px;
+      font-size: 1.05rem; font-weight: 800; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+    .form-privacy { font-size: 0.75rem; opacity: 0.6; margin-top: 12px; text-align: center; }
+
+    /* ── FAQ ── */
+    .faq { background: var(--bg); }
+    .faq-list { display: flex; flex-direction: column; gap: 12px; }
+    details {
+      background: var(--white);
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border);
+      overflow: hidden;
+    }
+    summary {
+      padding: 18px 22px;
+      font-size: 0.95rem; font-weight: 700; color: var(--text);
+      cursor: pointer; list-style: none;
+      display: flex; justify-content: space-between; align-items: center;
+      transition: background 0.15s;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after {
+      content: '＋'; color: var(--primary); font-size: 1.1rem; font-weight: 900;
+      transition: transform 0.2s;
+    }
+    details[open] summary { background: var(--primary-light); }
+    details[open] summary::after { transform: rotate(45deg); }
+    .faq-answer {
+      padding: 0 22px 18px;
+      font-size: 0.9rem; color: var(--text-sub); line-height: 1.75;
+    }
+
+    /* ── フッター ── */
+    footer {
+      background: #0f3d2a; color: rgba(255,255,255,0.7);
+      text-align: center; padding: 40px 24px;
+      font-size: 0.82rem;
+    }
+    footer .footer-logo { font-size: 1.2rem; font-weight: 900; color: var(--primary-mid); margin-bottom: 8px; }
+    footer a { color: rgba(255,255,255,0.5); text-decoration: none; margin: 0 10px; }
+
+    /* ── 成功メッセージ ── */
+    .success-msg {
+      display: none;
+      text-align: center; padding: 32px;
+      background: rgba(255,255,255,0.15);
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: var(--radius);
+    }
+    .success-msg .success-icon { font-size: 3rem; margin-bottom: 12px; }
+    .success-msg h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 8px; }
+    .success-msg p  { opacity: 0.8; font-size: 0.9rem; }
+
+    /* ── レスポンシブ ── */
+    @media (max-width: 600px) {
+      section { padding: 60px 16px; }
+      .hero   { padding: 60px 16px 80px; }
+      .form-box { padding: 24px 20px; }
+      .honest-box { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<header>
+  <div class="logo">🏍️ ツーリングプランナー</div>
+  <a href="#form" class="header-cta">βテストに参加</a>
+</header>
+
+<!-- ヒーロー -->
+<section class="hero">
+  <div class="hero-badge">🚀 クローズドβテスト 参加者募集中</div>
+  <h1>まだ走っていない道が、<br><em>きっとある。</em></h1>
+  <p class="hero-sub">
+    行き先に迷ったとき、いつもと違う道を走りたいとき。<br>
+    AIがあなたに合ったルートを提案します。
+  </p>
+  <a href="#form" class="hero-cta">📩 無料で参加登録する</a>
+  <p class="hero-note">登録無料・審査なし・バイクに乗っていれば誰でもOK</p>
+</section>
+
+<!-- 特徴 -->
+<section class="features">
+  <div class="container">
+    <span class="section-label">✨ アプリの特徴</span>
+    <h2>「どこ行こう？」をすぐ解決</h2>
+    <p class="section-lead">
+      条件を入れるだけで、AIが複数のルートを提案。
+      新しい道との出会いをサポートします。
+    </p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <h3>条件を入れるだけ</h3>
+        <p>出発地・バイクの種類・目的・時間を選ぶだけ。面倒なルート調査は不要です。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💡</div>
+        <h3>新しい道との出会い</h3>
+        <p>「こんな峠があったのか！」「ここ、めちゃくちゃいい道じゃん」そんな発見が楽しい。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>ルートをシェア</h3>
+        <p>走ったルートをアプリに投稿。あなたの経験が、だれかの次のツーリングのヒントに。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">☀️</div>
+        <h3>天気・渋滞も考慮</h3>
+        <p>当日の天気や季節に合わせた提案。快適なツーリングをサポートします。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚙️</div>
+        <h3>細かく設定できる</h3>
+        <p>高速使わない・峠道優先・林道・温泉・道の駅など、自分のスタイルに合わせて。</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏍️</div>
+        <h3>どんなバイクでもOK</h3>
+        <p>原付・小型から大型まで、オフロードバイクにも対応。バイクに合ったルートを提案。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- こんな人におすすめ -->
+<section class="recommend">
+  <div class="container">
+    <span class="section-label">👋 こんな人におすすめ</span>
+    <h2>あなたのこと、ありませんか？</h2>
+    <p class="section-lead">
+      ひとつでも当てはまったら、きっと楽しんでもらえます。
+    </p>
+    <div class="recommend-grid">
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>週末ツーリングの行き先が<br>いつも同じになってしまう
+          <span>新鮮なルートを発見できます</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>ルートを調べるのが面倒で<br>なかなか出発できない
+          <span>条件を入れるだけで即提案</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>峠道・林道・海沿いなど<br>走りたい道のイメージはある
+          <span>目的に合ったルートを自動生成</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>地元の良い道を<br>他のライダーに教えたい
+          <span>ルート投稿でシェアできます</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>ソロツーで気軽に<br>新しいエリアを開拓したい
+          <span>一人でも安心して使えます</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>引っ越してきて<br>地元の道をまだよく知らない
+          <span>その地域のおすすめルートを提案</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>バイクを買ったばかりで<br>どこへ行けばいいか分からない
+          <span>初心者向けルートにも対応</span>
+        </p>
+      </div>
+      <div class="recommend-card">
+        <div class="recommend-check">✓</div>
+        <p>仲間とのツーリングで<br>ルート決めを任されてしまった
+          <span>グループツーにも活用できます</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CBT説明 -->
+<section class="cbt">
+  <div class="container">
+    <span class="section-label">🔧 βテストについて</span>
+    <h2>一緒に育ててください</h2>
+    <p class="section-lead">
+      正直に言います。まだ完璧なアプリではありません。
+    </p>
+
+    <div class="honest-box">
+      <h3>💬 開発者より</h3>
+      <p>
+        このアプリはAIがルートを提案しますが、すべてのルートが完璧というわけではありません。<br>
+        でも、それよりも大切にしていることがあります。それは<strong>「あ、こんな道があったんだ！」という発見の体験</strong>です。<br><br>
+        みなさんに走ってもらい、フィードバックをもらいながら、少しずつ精度を上げていきたいと思っています。
+        投稿されたルートをAIが学習することで、どんどん良くなっていきます。<br>
+        最初期のメンバーとして、一緒にこのアプリを育ててください。
+      </p>
+    </div>
+
+    <div class="benefits-grid">
+      <div class="benefit-item">
+        <span class="benefit-icon">🚀</span>
+        <p>リリース前にいち早く体験できる</p>
+      </div>
+      <div class="benefit-item">
+        <span class="benefit-icon">🗣️</span>
+        <p>あなたの意見が機能に直接反映される</p>
+      </div>
+      <div class="benefit-item">
+        <span class="benefit-icon">👑</span>
+        <p>コミュニティの最初期メンバーになれる</p>
+      </div>
+      <div class="benefit-item">
+        <span class="benefit-icon">📝</span>
+        <p>フィードバックは3〜5分のアンケートのみ</p>
+      </div>
+      <div class="benefit-item">
+        <span class="benefit-icon">💰</span>
+        <p>完全無料・いつでも退会OK</p>
+      </div>
+      <div class="benefit-item">
+        <span class="benefit-icon">📱</span>
+        <p>iPhone・Android 両対応</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- フォーム -->
+<section class="form-section" id="form">
+  <div class="container">
+    <span class="section-label">📩 参加登録</span>
+    <h2>さっそく参加してみる</h2>
+    <p class="section-lead">
+      メールアドレスを登録するだけ。審査はありません。
+      テスト開始時にアプリのリンクをお送りします。
+    </p>
+
+    <div class="form-box" id="formBox">
+      <form id="registrationForm" action="https://formspree.io/f/YOUR_FORM_ID" method="POST" onsubmit="handleSubmit(event)">
+
+        <label for="email">メールアドレス <span style="opacity:0.6">*</span></label>
+        <input type="email" id="email" name="email" placeholder="touring@example.com" required>
+
+        <span class="form-bike-label">バイクの種類（任意・複数選択OK）</span>
+        <div class="bike-options" id="bikeOptions">
+          <span class="bike-option" onclick="toggleBike(this)">🛵 原付・小型（〜125cc）</span>
+          <span class="bike-option" onclick="toggleBike(this)">🏍️ 中型（126〜400cc）</span>
+          <span class="bike-option" onclick="toggleBike(this)">🏎️ 大型（401cc〜）</span>
+          <span class="bike-option" onclick="toggleBike(this)">🏔️ オフロード</span>
+        </div>
+        <input type="hidden" id="bikeInput" name="bike_type" value="">
+
+        <label for="message">ひとこと（任意）</label>
+        <textarea id="message" name="message" placeholder="どんな道を走るのが好きですか？期待することなど気軽にどうぞ😊"></textarea>
+
+        <button type="submit" class="submit-btn">🏍️ βテストに参加する（無料）</button>
+        <p class="form-privacy">
+          登録いただいたメールアドレスはβテストのご案内にのみ使用します。<br>
+          第三者への提供・スパムメールは一切行いません。
+        </p>
+      </form>
+    </div>
+
+    <div class="success-msg" id="successMsg">
+      <div class="success-icon">🎉</div>
+      <h3>登録ありがとうございます！</h3>
+      <p>テスト開始時にメールでご案内します。<br>もう少しだけお待ちください。一緒に楽しいアプリを作りましょう！🏍️</p>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq">
+  <div class="container">
+    <span class="section-label">❓ よくある質問</span>
+    <h2>気になること、ありますか？</h2>
+    <p class="section-lead"></p>
+    <div class="faq-list">
+      <details>
+        <summary>費用はかかりますか？</summary>
+        <div class="faq-answer">完全無料です。クレジットカードの登録も不要です。βテスト期間中は全機能を無料でお使いいただけます。</div>
+      </details>
+      <details>
+        <summary>どんなバイクでも使えますか？</summary>
+        <div class="faq-answer">原付（125cc以下）から大型バイク、オフロードまで対応しています。バイクの種類に合わせたルートを提案するので、どんなバイクでもお楽しみいただけます。</div>
+      </details>
+      <details>
+        <summary>ルートは正確ですか？</summary>
+        <div class="faq-answer">AIが提案するルートは完璧ではありません。道路状況や通行止めなど最新情報を反映できないこともあります。「新しい道との出会い」のきっかけとしてご活用いただき、実際に走る前に地図で確認することをおすすめします。</div>
+      </details>
+      <details>
+        <summary>フィードバックは必須ですか？</summary>
+        <div class="faq-answer">任意ですが、いただけると本当に助かります！アンケートは3〜5分程度で回答できます。みなさんの声がアプリの改善に直接つながります。</div>
+      </details>
+      <details>
+        <summary>iPhoneとAndroid、どちらに対応していますか？</summary>
+        <div class="faq-answer">両方対応しています。登録いただいたメールアドレスに、それぞれのダウンロードリンクをお送りします。</div>
+      </details>
+      <details>
+        <summary>βテストはいつから始まりますか？</summary>
+        <div class="faq-answer">準備が整い次第、ご登録のメールアドレスにご案内をお送りします。登録後しばらくお待ちください。</div>
+      </details>
+      <details>
+        <summary>途中でやめることはできますか？</summary>
+        <div class="faq-answer">もちろんです。いつでも退会できます。無理なご参加は不要ですので、ご都合に合わせてご参加ください。</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- フッター -->
+<footer>
+  <div class="footer-logo">🏍️ ツーリングプランナー</div>
+  <p style="margin-bottom:12px">βテストにご参加いただきありがとうございます</p>
+  <div>
+    <a href="#">プライバシーポリシー</a>
+    <a href="#">お問い合わせ</a>
+  </div>
+  <p style="margin-top:20px; font-size:0.75rem; opacity:0.4">© 2026 ツーリングプランナー</p>
+</footer>
+
+<script>
+  // バイク選択トグル
+  function toggleBike(el) {
+    el.classList.toggle('selected');
+    const selected = [...document.querySelectorAll('.bike-option.selected')]
+      .map(e => e.textContent.trim());
+    document.getElementById('bikeInput').value = selected.join(', ');
+  }
+
+  // フォーム送信ハンドラ
+  function handleSubmit(e) {
+    e.preventDefault();
+    const form = document.getElementById('registrationForm');
+    const email = document.getElementById('email').value;
+    if (!email) return;
+
+    // Formspree 送信
+    const data = new FormData(form);
+    fetch(form.action, {
+      method: 'POST',
+      body: data,
+      headers: { 'Accept': 'application/json' }
+    }).then(res => {
+      showSuccess();
+    }).catch(() => {
+      // エラー時も成功表示（デモ用）
+      showSuccess();
+    });
+  }
+
+  function showSuccess() {
+    document.getElementById('formBox').style.display = 'none';
+    const msg = document.getElementById('successMsg');
+    msg.style.display = 'block';
+    msg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // スムーススクロール（ヘッダー高さ分オフセット）
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        const offset = 70;
+        const top = target.getBoundingClientRect().top + window.scrollY - offset;
+        window.scrollTo({ top, behavior: 'smooth' });
+      }
+    });
+  });
+</script>
+</body>
+</html>

@@ -21,7 +21,8 @@
         "NSLocationWhenInUseUsageDescription": "ツーリングルート生成のために現在地を取得します。",
         "NSLocationAlwaysUsageDescription": "ツーリング中のルート追跡のために位置情報を使用します。",
         "NSPhotoLibraryUsageDescription": "ツーリング写真のアップロードのためにフォトライブラリにアクセスします。",
-        "NSCameraUsageDescription": "ツーリング写真の撮影のためにカメラを使用します。"
+        "NSCameraUsageDescription": "ツーリング写真の撮影のためにカメラを使用します。",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -45,6 +46,7 @@
     "plugins": [
       "expo-location",
       "expo-image-picker",
+      "./plugins/withAndroidBuildConfig",
       [
         "expo-build-properties",
         {

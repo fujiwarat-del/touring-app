@@ -1,12 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { buildPrompt } from '../shared/promptBuilder';
-import type { GenerateRouteRequest, Route } from '../shared/types';
+import type { GenerateRouteRequest, Route, WaypointObject } from '../shared/types';
 import {
   getTrafficAwareRoute,
   formatDurationSec,
   formatDistanceM,
 } from '../shared/googleMapsTraffic';
+import { getJarticCongestion } from '../shared/jarticTraffic';
+import { snapPointsToRoads } from '../shared/snapToRoads';
+
+// WaypointObject に準じる緩い型（name は AI が生成するため optional でも許容）
+type WaypointLike = { lat: number; lng: number; [key: string]: any };
 
 // ──────────────────────────────────────────────
 // 座標が日本の陸地エリア内か粗く判定する
@@ -157,9 +162,9 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
  * 例: B が全然違う方向にあり、A→B→C が A→C の 2 倍以上なら B を削除
  */
 function removeMajorDetours(
-  waypoints: { lat: number; lng: number; [key: string]: any }[],
+  waypoints: WaypointLike[],
   maxDetourFactor = 2.0
-): typeof waypoints {
+): WaypointLike[] {
   if (waypoints.length <= 2) return waypoints;
 
   const result: typeof waypoints = [waypoints[0]];
@@ -192,10 +197,10 @@ function removeMajorDetours(
  * - フィルタ後に中間地点が0になった場合は緩和した半径で救済する
  */
 function filterWaypoints(
-  waypoints: { lat: number; lng: number; [key: string]: any }[],
+  waypoints: WaypointLike[],
   maxRadiusKm: number,
   maxTotalKm: number
-): typeof waypoints {
+): WaypointLike[] {
   if (waypoints.length <= 1) return waypoints;
 
   const origin = waypoints[0];
@@ -228,17 +233,16 @@ function filterWaypoints(
     }
   }
 
-  // さらに中間地点が0の場合 → 元の経由地リストから中間点に最も近いものを1つ挿入
+  // さらに中間地点が0の場合 → 半径内の経由地から最も近いものを1つ挿入
+  // ※ 半径外の経由地は絶対に挿入しない（1700km先の離島が入り込むバグ防止）
   if (result.length < 3 && waypoints.length >= 3) {
-    const dest = result[result.length - 1];
-    const midLat = (origin.lat + dest.lat) / 2;
-    const midLng = (origin.lng + dest.lng) / 2;
     const intermediate = waypoints
-      .slice(1, -1) // 出発地・目的地を除く中間地点
+      .slice(1, -1)
       .filter(wp => !result.includes(wp))
+      .filter(wp => haversineKm(origin.lat, origin.lng, wp.lat, wp.lng) <= maxRadiusKm * 1.6) // 半径制限必須
       .sort((a, b) =>
-        haversineKm(midLat, midLng, a.lat, a.lng) -
-        haversineKm(midLat, midLng, b.lat, b.lng)
+        haversineKm(origin.lat, origin.lng, a.lat, a.lng) -
+        haversineKm(origin.lat, origin.lng, b.lat, b.lng)
       )[0];
     if (intermediate) {
       result.splice(result.length - 1, 0, intermediate);
@@ -246,15 +250,73 @@ function filterWaypoints(
   }
 
   // 最低でも出発地＋目的地の2点は確保
+  // ※ 目的地も必ず半径内のものを選ぶ（遠すぎる目的地は最近傍に差し替え）
   if (result.length < 2) {
-    const sorted = waypoints.slice(1).sort((a, b) =>
-      haversineKm(origin.lat, origin.lng, a.lat, a.lng) -
-      haversineKm(origin.lat, origin.lng, b.lat, b.lng)
-    );
-    result.push(sorted[0]);
+    const sorted = waypoints.slice(1)
+      .filter(wp => haversineKm(origin.lat, origin.lng, wp.lat, wp.lng) <= maxRadiusKm * 2)
+      .sort((a, b) =>
+        haversineKm(origin.lat, origin.lng, a.lat, a.lng) -
+        haversineKm(origin.lat, origin.lng, b.lat, b.lng)
+      );
+    if (sorted.length > 0) result.push(sorted[0]);
   }
 
   return result;
+}
+
+// ============================================================
+// フェリー使用ルートの検出・除外
+// ============================================================
+
+const FERRY_KEYWORDS = [
+  // 直接的な呼称
+  'フェリー', 'カーフェリー', 'フェリーボート',
+  // 乗船・移動系
+  '乗船', '渡航', '船便', '船で渡', '船に乗', '船を使',
+  // 船種
+  '旅客船', '高速船', '渡船', '連絡船',
+  // 航路・海路
+  '航路', '海路', '海上',
+  // 主要フェリー港・桟橋
+  '竹芝桟橋', '竹芝港', '久里浜港', '金谷港', '浜金谷',
+  '宮島口', '高松港', '宇野港', '稚内港', '小樽港',
+  '青森港', '函館港', '苫小牧港', '大間港', '脇野沢',
+  '佐渡汽船', '新潟港フェリー',
+  // 陸路不可の離島アクセス
+  '青函連絡', '津軽海峡', '伊豆大島', '三宅島', '八丈島',
+  '佐渡島', '隠岐', '壱岐島', '対馬', '屋久島', '種子島',
+  '奄美大島', '与論島', '沖永良部',
+];
+const WALKING_KEYWORDS = ['徒歩', 'ハイキング', '登山', '遊歩道', '登山道', '山道を歩', '歩いて', '歩行'];
+
+function containsKeyword(text: string, keywords: string[]): boolean {
+  return keywords.some(kw => text.includes(kw));
+}
+
+function isFerryRoute(route: Partial<Route>): boolean {
+  const texts = [
+    String(route.name ?? ''),
+    String(route.description ?? ''),
+    String(route.caution ?? ''),
+  ];
+  const wps = Array.isArray(route.waypointObjects) ? route.waypointObjects : [];
+  for (const wp of wps) {
+    texts.push(String((wp as any).name ?? ''), String((wp as any).description ?? ''));
+  }
+  return texts.some(t => containsKeyword(t, FERRY_KEYWORDS));
+}
+
+function isWalkingRoute(route: Partial<Route>): boolean {
+  const texts = [
+    String(route.name ?? ''),
+    String(route.description ?? ''),
+    String(route.caution ?? ''),
+  ];
+  const wps = Array.isArray(route.waypointObjects) ? route.waypointObjects : [];
+  for (const wp of wps) {
+    texts.push(String((wp as any).name ?? ''), String((wp as any).description ?? ''));
+  }
+  return texts.some(t => containsKeyword(t, WALKING_KEYWORDS));
 }
 
 // ============================================================
@@ -320,6 +382,28 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// モデル設定
+// 地理精度・JSON遵守を優先する場合は claude-sonnet-4-5 を推奨（コスト約5倍）
+// CLAUDE_MODEL 環境変数で上書き可能
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL ?? 'claude-haiku-4-5';
+
+// promptBuilder と同一ロジックで avgSpeed を計算するヘルパー
+// （promtBuilder.ts と必ず同じ値を使うこと。片方だけ変えるとフィルターがズレる）
+function calcAvgSpeed(
+  bikeType: string,
+  emptyRoadMode: boolean,
+  preferences: string[],
+  purposes: string[]
+): number {
+  if (bikeType === '小型125cc以下') return 28;
+  if (bikeType === 'オフロード')     return 20;
+  if (emptyRoadMode)                return 28;
+  if (preferences.includes('高速使わない')) return 30;
+  if (preferences.includes('峠道'))         return 30;
+  if (['ワインディング', '林道', '農道'].some(p => purposes.includes(p))) return 33;
+  return 50;
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -328,7 +412,7 @@ export default async function handler(
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-app-key');
     res.status(204).end();
     return;
   }
@@ -342,6 +426,18 @@ export default async function handler(
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
+
+  // App key check（APP_API_KEY が設定されている場合のみ強制）
+  // アプリ以外からの直叩きによるAPIコスト浪費を防ぐ
+  const expectedAppKey = process.env.APP_API_KEY;
+  if (expectedAppKey && req.headers['x-app-key'] !== expectedAppKey) {
+    console.warn('[Auth] Rejected request without valid x-app-key');
+    res.status(401).json({
+      error: '認証エラーが発生しました。アプリを最新版に更新してください。',
+      code: 'UNAUTHORIZED',
+    });
+    return;
+  }
 
   // Rate limiting
   const clientIp =
@@ -377,16 +473,50 @@ export default async function handler(
   const routeRequest = body as GenerateRouteRequest;
 
   try {
+    // 出発予定日時の検証（過去・不正値・7日超先は「今すぐ」扱いにする）
+    let departureTime: string | undefined;
+    if (routeRequest.departureTime) {
+      const parsed = new Date(routeRequest.departureTime);
+      const maxFuture = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now() && parsed.getTime() <= maxFuture) {
+        departureTime = parsed.toISOString();
+      }
+    }
+
+    // 出発が90分以上先の場合、現在のリアルタイム交通量はミスリードになるためスキップ
+    const departsSoon = !departureTime || new Date(departureTime).getTime() - Date.now() < 90 * 60 * 1000;
+
+    // JARTIC リアルタイム交通量を取得（失敗してもルート生成は続行）
+    if (departsSoon) {
+      const jarticInfo = await getJarticCongestion(routeRequest.lat, routeRequest.lng).catch(() => null);
+      if (jarticInfo) {
+        routeRequest.jarticInfo = jarticInfo;
+        console.log(`[JARTIC] Injected: ${jarticInfo.busySpots.length} busy spots, ${jarticInfo.quietSpots.length} quiet spots`);
+      }
+    } else {
+      console.log(`[JARTIC] Skipped (departure ${departureTime} is >90min ahead)`);
+    }
+
     const prompt = buildPrompt(routeRequest);
 
     // Call Claude API with claude-sonnet-4-6
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 4096,
+      model: CLAUDE_MODEL,
+      max_tokens: 8192, // 空いている道優先時は5ルート生成するため増量
       system: `あなたはバイクツーリング専門のルート提案AIです。
-日本の道路・観光地・ツーリングスポットに精通しており、
-安全で楽しいルートを提案することが得意です。
-必ず指定されたJSON形式のみを返してください。前後の説明文は不要です。`,
+日本の道路・観光地・ツーリングスポットに精通しており、安全で楽しいルートを提案することが得意です。
+必ず指定されたJSON形式のみを返してください。前後の説明文は不要です。
+
+【絶対厳守①・フェリー船舶禁止】フェリー・旅客船・高速船・渡船・カーフェリーなどあらゆる船舶を使うルートを絶対に提案しないこと。すべてのルートは陸路（道路・橋・トンネル）のみで完結すること。
+- 禁止の具体例：東京湾フェリー（久里浜〜金谷）、竹芝〜伊豆大島、本州〜佐渡、本州〜対馬・壱岐、九州〜屋久島、北海道〜利尻など
+- 橋でつながっていない島・離島（伊豆大島・三宅島・八丈島・佐渡島・隠岐・対馬・壱岐・屋久島・種子島など）は目的地・経由地に絶対使わないこと
+- 港・フェリーターミナル・桟橋を経由地に含めることも禁止
+【絶対厳守②・徒歩禁止】徒歩・ハイキング・登山・トレッキングを含むルートを絶対に提案しないこと。バイクで走行できる道路のみで完結させること。
+- 徒歩専用道・遊歩道・登山道を経由地に含めることも禁止
+- 「バイクで駐車場まで行き、そこから徒歩で展望台・滝・山頂へ」のような混在ルートも禁止
+- 経由地はバイクを駐めたままアクセスできる場所のみ（駐車場・道路沿い施設）
+- 禁止の具体例：徒歩が必要な滝・登山でしか行けない山頂・遊歩道の先にある展望台・山岳寺院の奥之院
+【絶対厳守③・小型バイク（125cc以下）高速道路禁止】バイク種類が「小型125cc以下」の場合、高速道路・自動車専用道路・SA・PAを絶対に使わないこと。一般道のみで構成すること。`,
       messages: [
         {
           role: 'user',
@@ -435,17 +565,25 @@ export default async function handler(
     }
 
     // Validate and sanitize routes
+    // 空いている道優先時は5本生成し、後段で実測混雑率により3本へ絞り込む
+    const maxRoutes = routeRequest.emptyRoadMode ? 5 : 3;
     const routes: Route[] = (parsedData.routes
-      .slice(0, 3) // Max 3 routes
+      .slice(0, maxRoutes)
       .map((r: Partial<Route>): Route | null => {
-        // waypointObjects のフィルタ処理
-        let wps = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
+        // waypointObjects のフィルタ処理（処理中は WaypointLike として扱い、最後に WaypointObject[] へキャスト）
+        let wps: WaypointLike[] = Array.isArray(r.waypointObjects) ? [...r.waypointObjects] : [];
         // Override first waypoint coords with actual GPS to prevent drift
         if (wps.length > 0) {
           wps[0] = { ...wps[0], lat: routeRequest.lat, lng: routeRequest.lng };
         }
         // 出発地から遠すぎる経由地・目的地を除去
-        const avgSpeed = routeRequest.emptyRoadMode ? 28 : 55;
+        // avgSpeed は promptBuilder.ts の calcAvgSpeed と同一ロジックで計算（ズレ防止）
+        const avgSpeed = calcAvgSpeed(
+          routeRequest.bikeType,
+          routeRequest.emptyRoadMode,
+          routeRequest.preferences,
+          routeRequest.purposes
+        );
         const isDistanceModeWp = routeRequest.planningMode === 'distance' && routeRequest.targetDistanceKm != null;
         const maxDistKm = isDistanceModeWp
           ? routeRequest.targetDistanceKm!
@@ -459,15 +597,63 @@ export default async function handler(
         wps = filterWaypoints(wps, maxRadiusKm, maxDistKm);
         // 大きな寄り道になる中間経由地を除去（例: 北向きと東向きが混在する経由地）
         wps = removeMajorDetours(wps);
-        // 経由地の訪問順序を最適化（2-opt法で最短距離順に並び替え）
-        wps = optimizeWaypointOrder(wps);
-        // 海上・架空座標を除去（出発地=実GPS座標は除外対象外）
+        // 海上・架空座標を除去（出発地=実GPS座標は除外対象外）※ 最適化の前に実施して無駄な計算を省く
         wps = wps.filter((wp, idx) => {
           if (idx === 0) return true; // 出発地は実GPS座標なので除外しない
           const valid = isCoordinateOnJapanLand(wp.lat, wp.lng);
           if (!valid) console.warn(`[Route] Removed invalid coord waypoint: ${wp.name ?? '?'} (${wp.lat}, ${wp.lng})`);
           return valid;
         });
+        // 経由地の訪問順序を最適化（2-opt法で最短距離順に並び替え）※ 不正座標除去後に実施
+        wps = optimizeWaypointOrder(wps);
+
+        // ── 最終距離チェック：フィルタ後も経由地の合計直線距離が上限の3倍を超えたら除外 ──
+        // フェリー・遠距離ルートがフォールバック処理をすり抜けた場合の安全網
+        if (wps.length >= 2) {
+          const straightTotalKm = wps.slice(0, -1).reduce((sum, wp, i) =>
+            sum + haversineKm(wp.lat, wp.lng, wps[i + 1].lat, wps[i + 1].lng), 0
+          );
+          if (straightTotalKm > maxDistKm * 3) {
+            console.warn(`[Route] "${r.name}" — straight-line total ${straightTotalKm.toFixed(0)}km far exceeds limit ${maxDistKm}km, skipping`);
+            return null;
+          }
+          // 出発地から最遠ウェイポイントまでの直線距離チェック（半径 × 3 を超えたら除外）
+          const maxFromOrigin = Math.max(...wps.slice(1).map(wp =>
+            haversineKm(routeRequest.lat, routeRequest.lng, wp.lat, wp.lng)
+          ));
+          if (maxFromOrigin > maxRadiusKm * 3) {
+            console.warn(`[Route] "${r.name}" — farthest waypoint ${maxFromOrigin.toFixed(0)}km from origin exceeds radius limit ${maxRadiusKm}km × 3, skipping`);
+            return null;
+          }
+        }
+
+        // フェリーを使うルートを除外
+        if (isFerryRoute(r)) {
+          console.warn(`[Route] "${r.name}" — ferry route detected, skipping`);
+          return null;
+        }
+        // 徒歩・ハイキングを含むルートを除外
+        if (isWalkingRoute(r)) {
+          console.warn(`[Route] "${r.name}" — walking route detected, skipping`);
+          return null;
+        }
+        // 小型125cc以下の場合：高速道路・ICを含む経由地を除去
+        if (routeRequest.bikeType === '小型125cc以下') {
+          const HIGHWAY_PATTERNS = /高速|自動車道|IC|JCT|SA|PA|サービスエリア|パーキングエリア|首都高|東名|名神|圏央|東関|常磐|関越|中央道|東北道|山陽|九州道|道央|道東|道北|札幌道/;
+          const beforeLen = wps.length;
+          wps = wps.filter((wp, idx) => {
+            if (idx === 0) return true; // 出発地は除外しない
+            const name = String((wp as any).name ?? '');
+            if (HIGHWAY_PATTERNS.test(name)) {
+              console.warn(`[Route] "${r.name}" — removed highway waypoint for 125cc: ${name}`);
+              return false;
+            }
+            return true;
+          });
+          if (wps.length < beforeLen) {
+            console.warn(`[Route] "${r.name}" — removed ${beforeLen - wps.length} highway waypoints for 125cc bike`);
+          }
+        }
         // フィルタ後に経由地が2点以下 or 出発地≒着地（中間なし）は崩壊ルートとして除外
         if (wps.length < 2) {
           console.warn(`[Route] "${r.name}" — no waypoints left, skipping`);
@@ -477,7 +663,21 @@ export default async function handler(
           console.warn(`[Route] "${r.name}" — start≈end with no intermediates (${haversineKm(wps[0].lat, wps[0].lng, wps[1].lat, wps[1].lng).toFixed(1)}km), skipping`);
           return null;
         }
-        // 目的地座標が確定済みの場合 → 最終 waypoint の座標を上書き（Claude の誤座標を修正）
+        // 経由地が大量削除され、残距離が目標に大きく届かない「抜け殻ルート」を除外
+        // （例: 日光200kmルートの遠方経由地が半径フィルタで全削除され、名前は日光のまま
+        //   埼玉止まり25kmのルートが返るケース。名前・説明と実態が乖離するため出さない）
+        const originalWpCount = Array.isArray(r.waypointObjects) ? r.waypointObjects.length : 0;
+        if (originalWpCount >= 3) {
+          const straightKm = wps.slice(0, -1).reduce((sum, wp, i) =>
+            sum + haversineKm(wp.lat, wp.lng, wps[i + 1].lat, wps[i + 1].lng), 0);
+          const estimatedRoadKm = straightKm * 1.3; // 道路係数
+          const removedRatio = 1 - wps.length / originalWpCount;
+          if (removedRatio >= 0.5 && estimatedRoadKm < maxDistKm * 0.4) {
+            console.warn(`[Route] "${r.name}" — collapsed after filtering (${originalWpCount}→${wps.length} wps, ~${Math.round(estimatedRoadKm)}km vs target ${maxDistKm}km), skipping`);
+            return null;
+          }
+        }
+        // 目的地座標が確定済みの場合 → 最終 waypoint の座標・名前を上書き（Claude の誤座標・誤名称を修正）
         if (
           routeRequest.routeMode === 'destination' &&
           routeRequest.destinationLat != null &&
@@ -489,10 +689,12 @@ export default async function handler(
             ...last,
             lat: routeRequest.destinationLat,
             lng: routeRequest.destinationLng,
+            name: routeRequest.destination ?? last.name,
           };
         }
         // For same-road return, force last waypoint to match start
-        if (routeRequest.returnType === 'same' && wps.length > 1) {
+        // destination モードでは目的地が優先されるため、折り返し処理は行わない
+        if (routeRequest.returnType === 'same' && routeRequest.routeMode !== 'destination' && wps.length > 1) {
           wps[wps.length - 1] = {
             ...wps[0],
             name: wps[0].name ?? '出発地点（帰着）',
@@ -513,11 +715,38 @@ export default async function handler(
           type: String(r.type ?? 'ツーリング'),
           description: String(r.description ?? ''),
           caution: String(r.caution ?? ''),
-          waypointObjects: wps,
+          waypointObjects: wps as WaypointObject[],
           highlightWaypoints: Array.isArray(r.highlightWaypoints) ? r.highlightWaypoints : [],
         };
       })
       .filter((r): r is Route => r !== null));
+
+    // 全ルートがフィルタで除外された場合はエラーを返す（アプリ側で再試行を促す）
+    if (routes.length === 0) {
+      console.warn('[Route] All generated routes were filtered out — returning error for retry');
+      throw new Error('All generated routes were filtered out');
+    }
+
+    // ── 経由地座標を最寄りの道路上にスナップ（Google Roads API） ──
+    // AI座標が道路から外れていると Google Maps が徒歩モードにフォール
+    // バックするため、全ルートの経由地を1回のAPIコールでまとめて補正する
+    try {
+      const allPoints = routes.flatMap((r) =>
+        r.waypointObjects.map((wp) => ({ lat: wp.lat, lng: wp.lng }))
+      );
+      const snapped = await snapPointsToRoads(allPoints);
+      if (snapped) {
+        let idx = 0;
+        for (const r of routes) {
+          r.waypointObjects = r.waypointObjects.map((wp) => {
+            const s = snapped[idx++];
+            return s ? { ...wp, lat: s.lat, lng: s.lng } : wp;
+          });
+        }
+      }
+    } catch (e: any) {
+      console.warn('[SnapToRoads] Skipped due to error:', e?.message);
+    }
 
     // ── Google Maps でリアルタイム渋滞情報を付加 ──────────────
     // API キーが設定されている場合のみ実行（設定なしでも動作する）
@@ -527,14 +756,21 @@ export default async function handler(
         if (!wps || wps.length < 2) return route;
 
         // Claude が生成した順序のまま渡す（greedy sort はかえって非効率になるため削除）
+        // departureTime 指定時は Google の予測渋滞（過去データベース）で計算される
         const traffic = await getTrafficAwareRoute(
-          wps.map((wp) => ({ lat: wp.lat, lng: wp.lng }))
+          wps.map((wp) => ({ lat: wp.lat, lng: wp.lng })),
+          departureTime
         );
 
         if (!traffic) return route; // API未設定 or エラー → 元のまま
 
         const isDistanceMode = routeRequest.planningMode === 'distance' && routeRequest.targetDistanceKm != null;
-        const avgSpeedKmh = routeRequest.emptyRoadMode ? 28 : 55;
+        const avgSpeedKmh = calcAvgSpeed(
+          routeRequest.bikeType,
+          routeRequest.emptyRoadMode,
+          routeRequest.preferences,
+          routeRequest.purposes
+        );
         const expectedKm = isDistanceMode
           ? routeRequest.targetDistanceKm!
           : Math.round((routeRequest.duration / 60) * avgSpeedKmh);
@@ -578,6 +814,12 @@ export default async function handler(
         if (route.caution) notes.unshift(route.caution);
         const updatedCaution = notes.join('\n');
 
+        // 混雑率（渋滞込み時間 ÷ 通常時間）。空いている道優先時の選別に使う
+        const trafficRatio =
+          traffic.durationSeconds > 0
+            ? traffic.durationWithTrafficSeconds / traffic.durationSeconds
+            : undefined;
+
         return {
           ...route,
           time: formatDurationSec(traffic.durationWithTrafficSeconds),
@@ -585,16 +827,30 @@ export default async function handler(
           congestion: overMinutes >= 30 ? '高' : traffic.congestion,
           caution: updatedCaution,
           distanceVerified: true, // Google Maps Routes API で検証済み
+          trafficRatio,
         };
       })
     );
+
+    // ── 空いている道優先: Google実測の混雑率が低い順に上位3本へ絞り込む ──
+    // AIの推測ではなく実測値でルートを選別する（5本生成 → 3本厳選）
+    let selectedRoutes = enrichedRoutes;
+    if (routeRequest.emptyRoadMode && enrichedRoutes.length > 3) {
+      selectedRoutes = [...enrichedRoutes]
+        .sort((a, b) => (a.trafficRatio ?? 99) - (b.trafficRatio ?? 99))
+        .slice(0, 3);
+      const dropped = enrichedRoutes
+        .filter((r) => !selectedRoutes.includes(r))
+        .map((r) => `${r.name}(ratio=${r.trafficRatio?.toFixed(2) ?? '-'})`);
+      console.log(`[EmptyRoad] Selected 3 of ${enrichedRoutes.length} by traffic ratio. Dropped: ${dropped.join(', ')}`);
+    }
 
     // 距離の短い順に並び替え（"約200km" → 200 として数値比較）
     const parseDistanceKm = (distStr: string): number => {
       const m = distStr.replace(/[^0-9.]/g, '');
       return m ? parseFloat(m) : 9999;
     };
-    const sortedRoutes = [...enrichedRoutes].sort(
+    const sortedRoutes = [...selectedRoutes].sort(
       (a, b) => parseDistanceKm(a.distance) - parseDistanceKm(b.distance)
     );
 
@@ -626,7 +882,7 @@ export default async function handler(
     res.status(500).json({
       error: 'ルート生成中にエラーが発生しました。しばらく後でお試しください。',
       code: 'GENERATION_ERROR',
-      details: process.env.NODE_ENV === 'development' ? message : undefined,
+      details: process.env.NODE_ENV === 'development' || process.env.DEBUG_ERRORS === '1' ? message : undefined,
     });
   }
 }

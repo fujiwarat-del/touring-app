@@ -48,6 +48,23 @@ service cloud.firestore {
         allow update: if isOwner(userId);
         allow delete: if isOwner(userId);
       }
+
+      // ガレージ（愛車）subcollection — 自分のみ読み書き可
+      match /bikes/{bikeId} {
+        allow read, write: if isOwner(userId);
+
+        // ツーリング前チェックリスト履歴
+        match /checklists/{checklistId} {
+          allow read, create, delete: if isOwner(userId);
+          allow update: if false; // 履歴は不変（作成と削除のみ）
+        }
+      }
+
+      // ツーリングアルバム（走行ログ）— 自分のみ読み書き可
+      match /tours/{tourId} {
+        allow read, write: if isOwner(userId)
+          && (!('photos' in request.resource.data) || request.resource.data.photos.size() <= 10);
+      }
     }
 
     // ============================================================
@@ -76,6 +93,30 @@ service cloud.firestore {
 
       // Only the post owner can delete their post
       allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ============================================================
+    // Reports（UGC通報）— App Store 審査ガイドライン 1.2 対応
+    // クライアントは作成のみ。閲覧・対応は Firebase Console から行う
+    // ※ アプリは Firebase Auth 未使用（AsyncStorage匿名UID）のため未認証で許可
+    // ============================================================
+
+    match /reports/{reportId} {
+      allow create: if request.resource.data.keys().hasAll(['postId', 'reporterUid', 'reason', 'createdAt'])
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() < 200;
+      allow read, update, delete: if false; // 運営のみ（Firebase Console / Admin SDK）
+    }
+
+    // ============================================================
+    // User profiles（プッシュトークン・プロフィール写真・BANフラグ）
+    // banned フィールドは Firebase Console から手動設定
+    // ============================================================
+
+    match /userProfiles/{userId} {
+      allow read: if true;
+      // banned フィールドはクライアントから変更不可
+      allow write: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['banned']);
     }
 
     // ============================================================
