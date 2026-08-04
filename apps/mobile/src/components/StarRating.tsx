@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { COLORS } from '../theme/colors';
-import { FONT_SIZE } from '../theme/spacing';
+import { FONT_SIZE, SPACING } from '../theme/spacing';
 
 interface StarRatingProps {
   score: number;       // 1-5
@@ -87,6 +87,78 @@ export function StarRow({
     </View>
   );
 }
+
+// ─── 入力用（投稿時に自分で評価を付ける） ─────────────────────
+interface StarInputProps {
+  label: string;
+  icon: string;
+  hint?: string;
+  score: number;          // 0 = 未評価
+  onChange: (score: number) => void;
+  labelColor?: string;
+  hintColor?: string;
+}
+
+export function StarInput({
+  label, icon, hint, score, onChange, labelColor, hintColor,
+}: StarInputProps) {
+  return (
+    <View style={inputStyles.container}>
+      <View style={inputStyles.labelWrap}>
+        <Text style={[inputStyles.label, labelColor ? { color: labelColor } : null]}>
+          {icon} {label}
+        </Text>
+        {hint && (
+          <Text style={[inputStyles.hint, hintColor ? { color: hintColor } : null]}>{hint}</Text>
+        )}
+      </View>
+      <View style={inputStyles.starsRow}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <TouchableOpacity
+            key={i}
+            // 同じ星をもう一度押すと解除（未評価に戻す）
+            onPress={() => onChange(score === i + 1 ? 0 : i + 1)}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          >
+            <Text
+              style={[
+                inputStyles.star,
+                { color: i < score ? COLORS.starFilled : COLORS.starEmpty },
+              ]}
+            >
+              ★
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const inputStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm,
+  },
+  labelWrap: { flex: 1 },
+  label: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  hint: {
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  starsRow: { flexDirection: 'row' },
+  star: {
+    fontSize: 28,
+    marginLeft: 2,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {

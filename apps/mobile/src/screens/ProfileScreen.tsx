@@ -26,6 +26,7 @@ import {
   TOURING_YEARS_OPTIONS,
 } from '../services/riderProfile';
 import type { RiderProfile } from '../services/riderProfile';
+import { getFollowCounts } from '../services/follows';
 import type { AnonUser } from '../services/firebase';
 import { BIKE_TYPES } from '@touring/shared';
 import type { BikeType } from '@touring/shared';
@@ -94,6 +95,7 @@ export default function ProfileScreen() {
   const [showLicensePicker, setShowLicensePicker] = useState(false);
 
   // ライダー情報（ツーリング歴・走行エリア・自己紹介）
+  const [followCounts, setFollowCounts] = useState({ following: 0, followers: 0 });
   const [rider, setRider] = useState<RiderProfile>({ touringYears: null, ridingAreas: [], bio: null });
   const [bioInput, setBioInput] = useState('');
   const [editingBio, setEditingBio] = useState(false);
@@ -167,6 +169,7 @@ export default function ProfileScreen() {
           .then(setMyStats)
           .catch(() => {})
           .finally(() => setStatsLoading(false));
+        getFollowCounts(u.uid).then(setFollowCounts).catch(() => {});
       }
     });
     return unsubscribe;
@@ -376,6 +379,27 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* フォロー数（タップで一覧） */}
+        {user && (
+          <View style={[styles.section, styles.followSection, { backgroundColor: colors.cardBg }]}>
+            <TouchableOpacity
+              style={styles.followCountItem}
+              onPress={() => navigation.navigate('FollowList', { uid: user.uid, kind: 'followers' })}
+            >
+              <Text style={[styles.followCountValue, { color: colors.textPrimary }]}>{followCounts.followers}</Text>
+              <Text style={[styles.followCountLabel, { color: colors.textSecondary }]}>フォロワー</Text>
+            </TouchableOpacity>
+            <View style={[styles.followDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity
+              style={styles.followCountItem}
+              onPress={() => navigation.navigate('FollowList', { uid: user.uid, kind: 'following' })}
+            >
+              <Text style={[styles.followCountValue, { color: colors.textPrimary }]}>{followCounts.following}</Text>
+              <Text style={[styles.followCountLabel, { color: colors.textSecondary }]}>フォロー中</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ライダー情報（ツーリング計画の参加申請時に主催者へ自動送信される） */}
         <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
@@ -1151,6 +1175,26 @@ const styles = StyleSheet.create({
     width: 1,
     marginVertical: SPACING.xs,
   },
+  // ─── フォロー数 ──────────────────────────────────────────────
+  followSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.lg,
+  },
+  followCountItem: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xxl,
+  },
+  followCountValue: {
+    fontSize: FONT_SIZE.xxl,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  followCountLabel: {
+    fontSize: FONT_SIZE.xs,
+    marginTop: 1,
+  },
+  followDivider: { width: 1, height: 32 },
   // ─── ライダー情報 ────────────────────────────────────────────
   riderHint: {
     fontSize: FONT_SIZE.xs,

@@ -128,15 +128,17 @@ export function RouteCard({
         {route.description}
       </Text>
 
-      {/* Star ratings */}
-      <View style={styles.ratingsSection}>
-        <StarRow
-          windingScore={route.windingScore}
-          sceneryScore={route.sceneryScore}
-          trafficScore={route.trafficScore}
-          difficultyScore={route.difficultyScore}
-        />
-      </View>
+      {/* Star ratings（投稿者が未評価の場合は空の星並びを出さない） */}
+      {(route.windingScore || route.sceneryScore || route.trafficScore || route.difficultyScore) ? (
+        <View style={styles.ratingsSection}>
+          <StarRow
+            windingScore={route.windingScore}
+            sceneryScore={route.sceneryScore}
+            trafficScore={route.trafficScore}
+            difficultyScore={route.difficultyScore}
+          />
+        </View>
+      ) : null}
 
       {/* Waypoints */}
       {route.waypointObjects && route.waypointObjects.length > 0 && (

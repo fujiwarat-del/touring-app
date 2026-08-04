@@ -23,6 +23,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { uploadPhotos } from '../services/cloudinaryService';
 import { postCommunityRoute, hasAcceptedUgcTerms, acceptUgcTerms } from '../services/firebase';
 import { PREFECTURES_BY_AREA } from '@touring/shared';
+import { StarInput } from '../components/StarRating';
 
 const MAX_PHOTOS = 10;
 
@@ -62,6 +63,9 @@ export default function PostScreen() {
   const [photos, setPhotos] = useState<string[]>(prefill?.photoUrls?.slice(0, MAX_PHOTOS) ?? []);
   const [uploading, setUploading] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [distanceInput, setDistanceInput] = useState('');
+  // 星評価（0 = 未評価）
+  const [ratings, setRatings] = useState({ winding: 0, scenery: 0, traffic: 0, difficulty: 0 });
 
   const pickPhotos = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -171,17 +175,18 @@ export default function PostScreen() {
       }
 
       // Build a minimal Route object with the map URL
+      // 星評価は投稿者本人が付けた値（未評価は 0 として保存し、表示側で空星になる）
       const routeData = {
         name: routeName.trim(),
         mapUrl: mapUrl.trim(),
         congestion: '-',
-        distance: '-',
+        distance: distanceInput.trim() ? `約${distanceInput.replace(/[^\d,]/g, '')}km` : '-',
         time: '-',
         difficulty: '-',
-        windingScore: 3,
-        sceneryScore: 3,
-        trafficScore: 3,
-        difficultyScore: 3,
+        windingScore: ratings.winding,
+        sceneryScore: ratings.scenery,
+        trafficScore: ratings.traffic,
+        difficultyScore: ratings.difficulty,
         type: selectedTags[0] ?? 'ツーリング',
         description: comment.trim(),
         caution: '',
@@ -207,7 +212,8 @@ export default function PostScreen() {
       setPosting(false);
       setUploading(false);
     }
-  }, [routeName, mapUrl, comment, departureArea, selectedPrefectures, selectedTags, photos, navigation]);
+  }, [routeName, mapUrl, comment, departureArea, selectedPrefectures, selectedTags, photos,
+      distanceInput, ratings, navigation]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
@@ -264,6 +270,52 @@ export default function PostScreen() {
               maxLength={300}
             />
             <Text style={styles.charCount}>{comment.length}/300</Text>
+          </View>
+
+          {/* 走行距離＋星評価 */}
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+            <Text style={styles.label}>📏 走行距離（km・任意）</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="例: 250"
+              placeholderTextColor={COLORS.textMuted}
+              value={distanceInput}
+              onChangeText={(t) => {
+                const digits = t.replace(/[^\d]/g, '');
+                setDistanceInput(digits ? Number(digits).toLocaleString('ja-JP') : '');
+              }}
+              keyboardType="number-pad"
+              maxLength={7}
+            />
+
+            <Text style={[styles.label, { marginTop: SPACING.lg }]}>⭐ このルートの評価（任意）</Text>
+            <Text style={[styles.ratingHint, { color: colors.textMuted }]}>
+              走ってみた感想を星でどうぞ。もう一度押すと取り消せます
+            </Text>
+            <StarInput
+              icon="〜" label="ワインディング" hint="カーブの楽しさ"
+              score={ratings.winding}
+              onChange={(v) => setRatings((r) => ({ ...r, winding: v }))}
+              labelColor={colors.textPrimary} hintColor={colors.textMuted}
+            />
+            <StarInput
+              icon="🗻" label="景観" hint="景色の良さ"
+              score={ratings.scenery}
+              onChange={(v) => setRatings((r) => ({ ...r, scenery: v }))}
+              labelColor={colors.textPrimary} hintColor={colors.textMuted}
+            />
+            <StarInput
+              icon="🚗" label="空いてる度" hint="星が多いほど空いている"
+              score={ratings.traffic}
+              onChange={(v) => setRatings((r) => ({ ...r, traffic: v }))}
+              labelColor={colors.textPrimary} hintColor={colors.textMuted}
+            />
+            <StarInput
+              icon="⚡" label="難易度" hint="星が多いほど上級者向け"
+              score={ratings.difficulty}
+              onChange={(v) => setRatings((r) => ({ ...r, difficulty: v }))}
+              labelColor={colors.textPrimary} hintColor={colors.textMuted}
+            />
           </View>
 
           {/* Departure Area */}
@@ -442,6 +494,10 @@ const styles = StyleSheet.create({
   commentInput: {
     height: 100,
     textAlignVertical: 'top',
+  },
+  ratingHint: {
+    fontSize: FONT_SIZE.xs,
+    marginBottom: SPACING.xs,
   },
   charCount: {
     fontSize: FONT_SIZE.xs,

@@ -28,7 +28,10 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ユーザーデータ（保存ルート・ガレージ・チェックリスト・アルバム）
+    // ユーザーデータ（保存ルート・ガレージ・チェックリスト・アルバム・フォロー関係）
+    // ※ フォロー機能は相手の followers サブコレクションへ書き込むため
+    //   認証導入までは users/** を許可する必要がある。
+    //   認証後は「自分の following のみ書込可」＋followers は Functions 同期へ移行する。
     match /users/{userId}/{document=**} {
       allow read, write: if true;
     }

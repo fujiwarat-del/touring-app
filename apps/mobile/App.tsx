@@ -45,6 +45,7 @@ import ChecklistScreen from './src/screens/ChecklistScreen';
 import AlbumScreen from './src/screens/AlbumScreen';
 import TourFormScreen from './src/screens/TourFormScreen';
 import TourDetailScreen from './src/screens/TourDetailScreen';
+import FollowListScreen from './src/screens/FollowListScreen';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
@@ -79,6 +80,7 @@ export type RootStackParamList = {
     };
   };
   TourDetail: { tourId: string };
+  FollowList: { uid: string; kind: 'following' | 'followers'; displayName?: string };
 };
 export type HomeTabParamList = {
   Community: undefined;
@@ -265,6 +267,15 @@ function AppNavigator() {
           })}
         />
         <Stack.Screen name="TourDetail" component={TourDetailScreen} options={{ headerShown: true, title: 'ツーリング記録', ...headerOpts }} />
+        <Stack.Screen
+          name="FollowList"
+          component={FollowListScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: (route.params as any).kind === 'followers' ? 'フォロワー' : 'フォロー中',
+            ...headerOpts,
+          })}
+        />
       </Stack.Navigator>
     </>
   );

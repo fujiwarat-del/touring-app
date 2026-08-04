@@ -32,6 +32,7 @@ import {
 import type { BikeRecord } from '../services/firebase';
 import { getRiderProfile, formatTouringYears } from '../services/riderProfile';
 import type { RiderProfile } from '../services/riderProfile';
+import { isFollowing, followUser, unfollowUser, getFollowCounts } from '../services/follows';
 import { getAllBadgesWithStatus } from '../utils/badges';
 import type { UserStats } from '../utils/badges';
 
@@ -50,6 +51,9 @@ export default function UserProfileScreen() {
   const [bikes, setBikes] = useState<BikeRecord[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [rider, setRider] = useState<RiderProfile>({ touringYears: null, ridingAreas: [], bio: null });
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [followCounts, setFollowCounts] = useState({ following: 0, followers: 0 });
   const [statsLoading, setStatsLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
 
@@ -76,7 +80,32 @@ export default function UserProfileScreen() {
     getRiderProfile(userId)
       .then(setRider)
       .catch(() => {});
+
+    isFollowing(userId).then(setFollowing).catch(() => {});
+    getFollowCounts(userId).then(setFollowCounts).catch(() => {});
   }, [userId]);
+
+  const handleToggleFollow = async () => {
+    setFollowBusy(true);
+    const wasFollowing = following;
+    // 楽観的更新
+    setFollowing(!wasFollowing);
+    setFollowCounts((c) => ({ ...c, followers: c.followers + (wasFollowing ? -1 : 1) }));
+    try {
+      if (wasFollowing) {
+        await unfollowUser(userId);
+      } else {
+        await followUser(userId, displayName, photoUrl);
+      }
+    } catch (e: any) {
+      // 失敗したら元に戻す
+      setFollowing(wasFollowing);
+      setFollowCounts((c) => ({ ...c, followers: c.followers + (wasFollowing ? 1 : -1) }));
+      Alert.alert('エラー', e?.message ?? '通信環境をご確認ください');
+    } finally {
+      setFollowBusy(false);
+    }
+  };
 
   // 投稿は独立してロード
   useEffect(() => {
@@ -116,6 +145,44 @@ export default function UserProfileScreen() {
               </View>
             )}
           </View>
+
+          {/* フォロー数（タップで一覧） */}
+          <View style={styles.followRow}>
+            <TouchableOpacity
+              style={styles.followCountItem}
+              onPress={() => navigation.navigate('FollowList', { uid: userId, kind: 'followers', displayName })}
+            >
+              <Text style={[styles.followCountValue, { color: colors.textPrimary }]}>{followCounts.followers}</Text>
+              <Text style={[styles.followCountLabel, { color: colors.textSecondary }]}>フォロワー</Text>
+            </TouchableOpacity>
+            <View style={[styles.followDivider, { backgroundColor: colors.border }]} />
+            <TouchableOpacity
+              style={styles.followCountItem}
+              onPress={() => navigation.navigate('FollowList', { uid: userId, kind: 'following', displayName })}
+            >
+              <Text style={[styles.followCountValue, { color: colors.textPrimary }]}>{followCounts.following}</Text>
+              <Text style={[styles.followCountLabel, { color: colors.textSecondary }]}>フォロー中</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* フォローボタン */}
+          {!isOwnProfile && myUid && (
+            <TouchableOpacity
+              style={[
+                styles.followBtn,
+                following
+                  ? { backgroundColor: 'transparent', borderColor: colors.border }
+                  : { backgroundColor: colors.primary, borderColor: colors.primary },
+                followBusy && { opacity: 0.6 },
+              ]}
+              onPress={handleToggleFollow}
+              disabled={followBusy}
+            >
+              <Text style={[styles.followBtnText, { color: following ? colors.textSecondary : '#fff' }]}>
+                {following ? 'フォロー中' : '＋ フォローする'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* ブロックボタン（他ユーザーのみ・App Store UGC要件） */}
           {!isOwnProfile && myUid && (
@@ -376,6 +443,35 @@ const styles = StyleSheet.create({
   meBadgeText: {
     fontSize: FONT_SIZE.xs,
     color: COLORS.primary,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  followRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  followCountItem: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+  },
+  followCountValue: {
+    fontSize: FONT_SIZE.xl,
+    fontWeight: FONT_WEIGHT.bold,
+  },
+  followCountLabel: {
+    fontSize: FONT_SIZE.xs,
+    marginTop: 1,
+  },
+  followDivider: { width: 1, height: 28 },
+  followBtn: {
+    marginTop: SPACING.md,
+    borderWidth: 1.5,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.xxl,
+    paddingVertical: SPACING.sm,
+  },
+  followBtnText: {
+    fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.bold,
   },
   riderRow: {
