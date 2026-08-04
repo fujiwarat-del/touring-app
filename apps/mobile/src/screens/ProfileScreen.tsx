@@ -15,6 +15,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useNavigation } from '@react-navigation/native';
+import type { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '../../App';
 import { getLicenseDate, setLicenseDate as saveLicenseDate } from '../services/reminders';
 import type { AnonUser } from '../services/firebase';
 import { BIKE_TYPES } from '@touring/shared';
@@ -59,6 +62,7 @@ async function saveMyBikes(bikes: MyBike[]): Promise<void> {
 
 export default function ProfileScreen() {
   const { colors, mode, colorKey, setMode, setColorKey } = useTheme();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
   const [user, setUser] = useState<AnonUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -349,6 +353,15 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* 保存したルート（旧「保存済み」タブ） */}
+        <TouchableOpacity
+          style={[styles.linkRow, { backgroundColor: colors.cardBg }]}
+          onPress={() => navigation.navigate('Saved')}
+        >
+          <Text style={[styles.linkRowText, { color: colors.textPrimary }]}>⭐ 保存したルート</Text>
+          <Text style={[styles.linkRowArrow, { color: colors.textMuted }]}>›</Text>
+        </TouchableOpacity>
 
         {/* My Bikes */}
         <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
@@ -1012,6 +1025,24 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     marginVertical: SPACING.xs,
+  },
+  // ─── マイページ内リンク行 ────────────────────────────────────
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    borderRadius: RADIUS.lg,
+  },
+  linkRowText: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: FONT_WEIGHT.semiBold,
+  },
+  linkRowArrow: {
+    fontSize: FONT_SIZE.xl,
   },
   // ─── 免許証有効期限 ──────────────────────────────────────────
   licenseHint: {

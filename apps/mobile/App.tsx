@@ -30,10 +30,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 
-import type { Route, WaypointObject } from '@touring/shared';
+import type { WaypointObject } from '@touring/shared';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
-import HomeScreen from './src/screens/HomeScreen';
-import ResultsScreen from './src/screens/ResultsScreen';
 import PostScreen from './src/screens/PostScreen';
 import CommunityScreen from './src/screens/CommunityScreen';
 import SavedScreen from './src/screens/SavedScreen';
@@ -51,7 +49,7 @@ import TourDetailScreen from './src/screens/TourDetailScreen';
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
   HomeTabs: undefined;
-  Results: { routes?: Route[]; startLat?: number; startLng?: number };
+  Saved: undefined;
   Post: {
     prefill?: {
       routeName: string;
@@ -83,12 +81,11 @@ export type RootStackParamList = {
   TourDetail: { tourId: string };
 };
 export type HomeTabParamList = {
-  Home: undefined;
   Community: undefined;
   Garage: undefined;
   Album: undefined;
-  Saved: undefined;
   Profile: undefined;
+  // 今後追加予定: Plans（ツーリング計画）/ Nearby（近くのライダー）/ Groups（グループ）
 };
 
 // ─── ナビゲーター ─────────────────────────────────────────
@@ -120,14 +117,9 @@ function HomeTabs() {
       }}
     >
       <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ tabBarLabel: 'ルート生成', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏍️</Text> }}
-      />
-      <Tab.Screen
         name="Community"
         component={CommunityScreen}
-        options={{ tabBarLabel: 'コミュニティ', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text> }}
+        options={{ tabBarLabel: 'フィード', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text> }}
       />
       <Tab.Screen
         name="Garage"
@@ -140,14 +132,9 @@ function HomeTabs() {
         options={{ tabBarLabel: 'アルバム', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📔</Text> }}
       />
       <Tab.Screen
-        name="Saved"
-        component={SavedScreen}
-        options={{ tabBarLabel: '保存済み', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>⭐</Text> }}
-      />
-      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarLabel: 'プロフィール', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text> }}
+        options={{ tabBarLabel: 'マイページ', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text> }}
       />
     </Tab.Navigator>
   );
@@ -245,7 +232,7 @@ function AppNavigator() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="HomeTabs" component={HomeTabs} />
-        <Stack.Screen name="Results"     component={ResultsScreen}     options={{ headerShown: true, title: 'ルート提案',    ...headerOpts }} />
+        <Stack.Screen name="Saved"       component={SavedScreen}       options={{ headerShown: true, title: '保存したルート', ...headerOpts }} />
         <Stack.Screen name="Post"        component={PostScreen}        options={{ headerShown: true, title: 'ルートを投稿',  ...headerOpts }} />
         <Stack.Screen name="RouteMap"    component={RouteMapScreen}    options={{ headerShown: true, title: 'ルートマップ',  ...headerOpts }} />
         <Stack.Screen

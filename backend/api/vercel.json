@@ -11,47 +11,9 @@
   ],
   "routes": [
     {
-      "src": "/api/claude",
-      "methods": ["POST"],
-      "dest": "/api/claude.ts",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
-    },
-    {
-      "src": "/api/compare",
-      "methods": ["POST"],
-      "dest": "/api/compare.ts",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
-    },
-    {
-      "src": "/api/routes/popular",
-      "methods": ["GET"],
-      "dest": "/api/routes.ts",
-      "headers": {
-        "Access-Control-Allow-Origin": "*"
-      }
-    },
-    {
       "src": "/api/health",
       "methods": ["GET"],
       "dest": "/api/health.ts"
-    },
-    {
-      "src": "/api/gemini-models",
-      "methods": ["GET"],
-      "dest": "/api/gemini-models.ts"
-    },
-    {
-      "src": "/api/test-maps",
-      "methods": ["GET"],
-      "dest": "/api/test-maps.ts"
     },
     {
       "src": "/api/notify",
@@ -60,7 +22,7 @@
       "headers": {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
+        "Access-Control-Allow-Headers": "Content-Type, x-app-key"
       }
     },
     {
@@ -70,7 +32,7 @@
       "headers": {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        "Access-Control-Allow-Headers": "Content-Type, x-app-key"
       }
     }
   ]
