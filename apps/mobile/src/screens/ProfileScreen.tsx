@@ -19,6 +19,13 @@ import { useNavigation } from '@react-navigation/native';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { RootStackParamList } from '../../App';
 import { getLicenseDate, setLicenseDate as saveLicenseDate } from '../services/reminders';
+import {
+  getMyRiderProfile,
+  updateMyRiderProfile,
+  RIDING_AREAS,
+  TOURING_YEARS_OPTIONS,
+} from '../services/riderProfile';
+import type { RiderProfile } from '../services/riderProfile';
 import type { AnonUser } from '../services/firebase';
 import { BIKE_TYPES } from '@touring/shared';
 import type { BikeType } from '@touring/shared';
@@ -86,10 +93,26 @@ export default function ProfileScreen() {
   const [licenseDate, setLicenseDateState] = useState<string | null>(null);
   const [showLicensePicker, setShowLicensePicker] = useState(false);
 
+  // ライダー情報（ツーリング歴・走行エリア・自己紹介）
+  const [rider, setRider] = useState<RiderProfile>({ touringYears: null, ridingAreas: [], bio: null });
+  const [bioInput, setBioInput] = useState('');
+  const [editingBio, setEditingBio] = useState(false);
+
+  const patchRider = useCallback((patch: Partial<RiderProfile>) => {
+    setRider((prev) => ({ ...prev, ...patch }));
+    updateMyRiderProfile(patch).catch(() => {
+      Alert.alert('保存に失敗しました', '通信環境をご確認ください');
+    });
+  }, []);
+
   useEffect(() => {
     loadMyBikes().then(setMyBikes);
     getMyPhotoUrl().then(setPhotoUrl).catch(() => {});
     getLicenseDate().then(setLicenseDateState).catch(() => {});
+    getMyRiderProfile().then((p) => {
+      setRider(p);
+      setBioInput(p.bio ?? '');
+    }).catch(() => {});
     AsyncStorage.getItem(MAIN_BIKE_TYPE_KEY).then((v) => {
       if (v) setBikeType(v as BikeType);
     }).catch(() => {});
@@ -352,6 +375,108 @@ export default function ProfileScreen() {
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>バッジ</Text>
             </View>
           </View>
+        </View>
+
+        {/* ライダー情報（ツーリング計画の参加申請時に主催者へ自動送信される） */}
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🪪 ライダー情報</Text>
+          <Text style={[styles.riderHint, { color: colors.textMuted }]}>
+            ツーリング計画に参加申請するとき、主催者へ自動で伝わります
+          </Text>
+
+          {/* ツーリング歴 */}
+          <Text style={[styles.settingLabel, { color: colors.textSecondary, marginTop: SPACING.lg }]}>
+            ツーリング歴
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.riderChipRow}>
+            {TOURING_YEARS_OPTIONS.map((opt) => {
+              const selected = rider.touringYears === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.riderChip,
+                    { borderColor: colors.border },
+                    selected && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                  ]}
+                  onPress={() => patchRider({ touringYears: selected ? null : opt.value })}
+                >
+                  <Text style={[styles.riderChipText, { color: selected ? colors.primary : colors.textSecondary }]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* 主な走行エリア */}
+          <Text style={[styles.settingLabel, { color: colors.textSecondary, marginTop: SPACING.lg }]}>
+            主な走行エリア（複数選択可）
+          </Text>
+          <View style={styles.riderChipWrap}>
+            {RIDING_AREAS.map((area) => {
+              const selected = rider.ridingAreas.includes(area);
+              return (
+                <TouchableOpacity
+                  key={area}
+                  style={[
+                    styles.riderChip,
+                    { borderColor: colors.border },
+                    selected && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                  ]}
+                  onPress={() =>
+                    patchRider({
+                      ridingAreas: selected
+                        ? rider.ridingAreas.filter((a) => a !== area)
+                        : [...rider.ridingAreas, area],
+                    })
+                  }
+                >
+                  <Text style={[styles.riderChipText, { color: selected ? colors.primary : colors.textSecondary }]}>
+                    {area}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* 自己紹介 */}
+          <Text style={[styles.settingLabel, { color: colors.textSecondary, marginTop: SPACING.lg }]}>
+            自己紹介
+          </Text>
+          {editingBio ? (
+            <>
+              <TextInput
+                style={[styles.bioInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                value={bioInput}
+                onChangeText={setBioInput}
+                placeholder="好きな道、走り方のスタイルなど"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={300}
+              />
+              <View style={styles.bioBtnRow}>
+                <TouchableOpacity
+                  style={[styles.bioBtn, { borderColor: colors.border }]}
+                  onPress={() => { setBioInput(rider.bio ?? ''); setEditingBio(false); }}
+                >
+                  <Text style={[styles.bioBtnText, { color: colors.textSecondary }]}>キャンセル</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bioBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                  onPress={() => { patchRider({ bio: bioInput.trim() || null }); setEditingBio(false); }}
+                >
+                  <Text style={[styles.bioBtnText, { color: '#fff' }]}>保存</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <TouchableOpacity onPress={() => setEditingBio(true)}>
+              <Text style={[styles.bioText, { color: rider.bio ? colors.textPrimary : colors.textMuted }]}>
+                {rider.bio ?? 'タップして入力'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* 保存したルート（旧「保存済み」タブ） */}
@@ -1025,6 +1150,60 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     marginVertical: SPACING.xs,
+  },
+  // ─── ライダー情報 ────────────────────────────────────────────
+  riderHint: {
+    fontSize: FONT_SIZE.xs,
+    marginTop: 2,
+  },
+  riderChipRow: {
+    gap: SPACING.xs,
+    paddingRight: SPACING.lg,
+  },
+  riderChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  riderChip: {
+    borderWidth: 1.5,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 7,
+  },
+  riderChipText: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.semiBold,
+  },
+  bioInput: {
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontSize: FONT_SIZE.md,
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  bioText: {
+    fontSize: FONT_SIZE.md,
+    lineHeight: 22,
+    paddingVertical: SPACING.sm,
+  },
+  bioBtnRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  bioBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+  },
+  bioBtnText: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: FONT_WEIGHT.bold,
   },
   // ─── マイページ内リンク行 ────────────────────────────────────
   linkRow: {

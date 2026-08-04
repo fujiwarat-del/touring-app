@@ -30,6 +30,8 @@ import {
   blockUser,
 } from '../services/firebase';
 import type { BikeRecord } from '../services/firebase';
+import { getRiderProfile, formatTouringYears } from '../services/riderProfile';
+import type { RiderProfile } from '../services/riderProfile';
 import { getAllBadgesWithStatus } from '../utils/badges';
 import type { UserStats } from '../utils/badges';
 
@@ -47,6 +49,7 @@ export default function UserProfileScreen() {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [bikes, setBikes] = useState<BikeRecord[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [rider, setRider] = useState<RiderProfile>({ touringYears: null, ridingAreas: [], bio: null });
   const [statsLoading, setStatsLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
 
@@ -68,6 +71,10 @@ export default function UserProfileScreen() {
 
     getUserPhotoUrl(userId)
       .then(setPhotoUrl)
+      .catch(() => {});
+
+    getRiderProfile(userId)
+      .then(setRider)
       .catch(() => {});
   }, [userId]);
 
@@ -178,6 +185,26 @@ export default function UserProfileScreen() {
                 </View>
               ))}
             </View>
+          </View>
+        )}
+
+        {/* ライダー情報 */}
+        {(rider.touringYears != null || rider.ridingAreas.length > 0 || rider.bio) && (
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+            <Text style={styles.sectionTitle}>🪪 ライダー情報</Text>
+            {rider.touringYears != null && (
+              <Text style={[styles.riderRow, { color: colors.textSecondary }]}>
+                ツーリング歴: {formatTouringYears(rider.touringYears)}
+              </Text>
+            )}
+            {rider.ridingAreas.length > 0 && (
+              <Text style={[styles.riderRow, { color: colors.textSecondary }]}>
+                主な走行エリア: {rider.ridingAreas.join('・')}
+              </Text>
+            )}
+            {rider.bio && (
+              <Text style={[styles.riderBio, { color: colors.textPrimary }]}>{rider.bio}</Text>
+            )}
           </View>
         )}
 
@@ -350,6 +377,18 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs,
     color: COLORS.primary,
     fontWeight: FONT_WEIGHT.bold,
+  },
+  riderRow: {
+    fontSize: FONT_SIZE.md,
+    marginBottom: SPACING.xs,
+  },
+  riderBio: {
+    fontSize: FONT_SIZE.md,
+    lineHeight: 22,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
   },
   blockBtn: {
     marginTop: SPACING.sm,
