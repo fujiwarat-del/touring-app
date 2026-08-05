@@ -36,6 +36,18 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // グループ（本体・メンバー・参加申請）
+    match /groups/{groupId}/{document=**} {
+      allow read, write: if true;
+    }
+
+    // ツーリング計画（本体・参加者・参加申請）
+    // ※ 公開範囲（フォロワーのみ / グループ限定）の絞り込みは現状クライアント側。
+    //   認証導入後にここでサーバー側の絞り込みへ移行すること。
+    match /plans/{planId}/{document=**} {
+      allow read, write: if true;
+    }
+
     // UGC通報（作成のみ。閲覧・対応は Firebase Console から）
     match /reports/{reportId} {
       allow create: if request.resource.data.keys().hasAll(['postId', 'reporterUid', 'reason'])

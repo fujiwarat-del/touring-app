@@ -49,6 +49,9 @@ import FollowListScreen from './src/screens/FollowListScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import GroupFormScreen from './src/screens/GroupFormScreen';
 import GroupDetailScreen from './src/screens/GroupDetailScreen';
+import PlansScreen from './src/screens/PlansScreen';
+import PlanFormScreen from './src/screens/PlanFormScreen';
+import PlanDetailScreen from './src/screens/PlanDetailScreen';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
@@ -86,15 +89,18 @@ export type RootStackParamList = {
   FollowList: { uid: string; kind: 'following' | 'followers'; displayName?: string };
   GroupForm: { groupId?: string };
   GroupDetail: { groupId: string };
+  PlanForm: { planId?: string };
+  PlanDetail: { planId: string };
   // マイページ配下に移動した画面
   Garage: undefined;
   Album: undefined;
 };
 export type HomeTabParamList = {
   Community: undefined;
+  Plans: undefined;
   Groups: undefined;
   Profile: undefined;
-  // 今後追加予定: Plans（ツーリング計画）/ Nearby（近くのライダー）
+  // 今後追加予定: Nearby（近くのライダー）
 };
 
 // ─── ナビゲーター ─────────────────────────────────────────
@@ -129,6 +135,11 @@ function HomeTabs() {
         name="Community"
         component={CommunityScreen}
         options={{ tabBarLabel: 'フィード', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text> }}
+      />
+      <Tab.Screen
+        name="Plans"
+        component={PlansScreen}
+        options={{ tabBarLabel: '計画', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📅</Text> }}
       />
       <Tab.Screen
         name="Groups"
@@ -281,6 +292,16 @@ function AppNavigator() {
           })}
         />
         <Stack.Screen name="GroupDetail" component={GroupDetailScreen} options={{ headerShown: true, title: 'グループ', ...headerOpts }} />
+        <Stack.Screen
+          name="PlanForm"
+          component={PlanFormScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: (route.params as any)?.planId ? '募集を編集' : 'ツーリングを募集',
+            ...headerOpts,
+          })}
+        />
+        <Stack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ headerShown: true, title: 'ツーリング計画', ...headerOpts }} />
         <Stack.Screen
           name="FollowList"
           component={FollowListScreen}
