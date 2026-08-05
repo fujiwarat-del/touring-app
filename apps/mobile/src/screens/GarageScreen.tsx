@@ -58,11 +58,6 @@ export default function GarageScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>🔧 ガレージ</Text>
-        <Text style={[styles.headerSub, { color: colors.textLight }]}>愛車の管理と出発前チェック</Text>
-      </View>
 
       {loading ? (
         <View style={styles.center}>

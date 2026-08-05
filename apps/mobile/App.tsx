@@ -46,6 +46,9 @@ import AlbumScreen from './src/screens/AlbumScreen';
 import TourFormScreen from './src/screens/TourFormScreen';
 import TourDetailScreen from './src/screens/TourDetailScreen';
 import FollowListScreen from './src/screens/FollowListScreen';
+import GroupsScreen from './src/screens/GroupsScreen';
+import GroupFormScreen from './src/screens/GroupFormScreen';
+import GroupDetailScreen from './src/screens/GroupDetailScreen';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
@@ -81,13 +84,17 @@ export type RootStackParamList = {
   };
   TourDetail: { tourId: string };
   FollowList: { uid: string; kind: 'following' | 'followers'; displayName?: string };
+  GroupForm: { groupId?: string };
+  GroupDetail: { groupId: string };
+  // マイページ配下に移動した画面
+  Garage: undefined;
+  Album: undefined;
 };
 export type HomeTabParamList = {
   Community: undefined;
-  Garage: undefined;
-  Album: undefined;
+  Groups: undefined;
   Profile: undefined;
-  // 今後追加予定: Plans（ツーリング計画）/ Nearby（近くのライダー）/ Groups（グループ）
+  // 今後追加予定: Plans（ツーリング計画）/ Nearby（近くのライダー）
 };
 
 // ─── ナビゲーター ─────────────────────────────────────────
@@ -124,14 +131,9 @@ function HomeTabs() {
         options={{ tabBarLabel: 'フィード', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text> }}
       />
       <Tab.Screen
-        name="Garage"
-        component={GarageScreen}
-        options={{ tabBarLabel: 'ガレージ', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔧</Text> }}
-      />
-      <Tab.Screen
-        name="Album"
-        component={AlbumScreen}
-        options={{ tabBarLabel: 'アルバム', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📔</Text> }}
+        name="Groups"
+        component={GroupsScreen}
+        options={{ tabBarLabel: 'グループ', tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👥</Text> }}
       />
       <Tab.Screen
         name="Profile"
@@ -235,6 +237,8 @@ function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="HomeTabs" component={HomeTabs} />
         <Stack.Screen name="Saved"       component={SavedScreen}       options={{ headerShown: true, title: '保存したルート', ...headerOpts }} />
+        <Stack.Screen name="Garage"      component={GarageScreen}      options={{ headerShown: true, title: '🔧 ガレージ', ...headerOpts }} />
+        <Stack.Screen name="Album"       component={AlbumScreen}       options={{ headerShown: true, title: '📔 アルバム', ...headerOpts }} />
         <Stack.Screen name="Post"        component={PostScreen}        options={{ headerShown: true, title: 'ルートを投稿',  ...headerOpts }} />
         <Stack.Screen name="RouteMap"    component={RouteMapScreen}    options={{ headerShown: true, title: 'ルートマップ',  ...headerOpts }} />
         <Stack.Screen
@@ -267,6 +271,16 @@ function AppNavigator() {
           })}
         />
         <Stack.Screen name="TourDetail" component={TourDetailScreen} options={{ headerShown: true, title: 'ツーリング記録', ...headerOpts }} />
+        <Stack.Screen
+          name="GroupForm"
+          component={GroupFormScreen}
+          options={({ route }) => ({
+            headerShown: true,
+            title: (route.params as any)?.groupId ? 'グループを編集' : 'グループを作成',
+            ...headerOpts,
+          })}
+        />
+        <Stack.Screen name="GroupDetail" component={GroupDetailScreen} options={{ headerShown: true, title: 'グループ', ...headerOpts }} />
         <Stack.Screen
           name="FollowList"
           component={FollowListScreen}

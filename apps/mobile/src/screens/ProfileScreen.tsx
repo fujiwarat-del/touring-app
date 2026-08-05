@@ -503,14 +503,28 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* 保存したルート（旧「保存済み」タブ） */}
-        <TouchableOpacity
-          style={[styles.linkRow, { backgroundColor: colors.cardBg }]}
-          onPress={() => navigation.navigate('Saved')}
-        >
-          <Text style={[styles.linkRowText, { color: colors.textPrimary }]}>⭐ 保存したルート</Text>
-          <Text style={[styles.linkRowArrow, { color: colors.textMuted }]}>›</Text>
-        </TouchableOpacity>
+        {/* マイコンテンツへの入口（旧タブから集約） */}
+        {([
+          { icon: '🔧', label: 'ガレージ', sub: '愛車の管理・出発前チェック', screen: 'Garage' as const },
+          { icon: '📔', label: 'アルバム', sub: 'ツーリングの記録と思い出', screen: 'Album' as const },
+          { icon: '⭐', label: '保存したルート', sub: '', screen: 'Saved' as const },
+        ]).map((item) => (
+          <TouchableOpacity
+            key={item.screen}
+            style={[styles.linkRow, { backgroundColor: colors.cardBg }]}
+            onPress={() => navigation.navigate(item.screen)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.linkRowText, { color: colors.textPrimary }]}>
+                {item.icon} {item.label}
+              </Text>
+              {item.sub ? (
+                <Text style={[styles.linkRowSub, { color: colors.textMuted }]}>{item.sub}</Text>
+              ) : null}
+            </View>
+            <Text style={[styles.linkRowArrow, { color: colors.textMuted }]}>›</Text>
+          </TouchableOpacity>
+        ))}
 
         {/* My Bikes */}
         <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
@@ -1263,6 +1277,10 @@ const styles = StyleSheet.create({
   linkRowText: {
     fontSize: FONT_SIZE.md,
     fontWeight: FONT_WEIGHT.semiBold,
+  },
+  linkRowSub: {
+    fontSize: FONT_SIZE.xs,
+    marginTop: 2,
   },
   linkRowArrow: {
     fontSize: FONT_SIZE.xl,

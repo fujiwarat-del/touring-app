@@ -57,11 +57,8 @@ export default function AlbumScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      {/* Header */}
+      {/* 年間サマリー */}
       <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>📔 アルバム</Text>
-        <Text style={[styles.headerSub, { color: colors.textLight }]}>ツーリングの思い出を記録</Text>
-
         {/* 年間サマリー */}
         <View style={[styles.summaryCard, { backgroundColor: colors.chipBg }]}>
           <View style={styles.yearRow}>
