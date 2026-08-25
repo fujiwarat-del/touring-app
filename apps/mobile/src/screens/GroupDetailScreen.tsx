@@ -26,6 +26,7 @@ import {
 } from '../services/groups';
 import type { Group, GroupMember, JoinRequest, MembershipState } from '../services/groups';
 import { formatTouringYears } from '../services/riderProfile';
+import { isSignedIn } from '../services/firebase';
 
 type RouteProps = RouteProp<RootStackParamList, 'GroupDetail'>;
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -67,6 +68,13 @@ export default function GroupDetailScreen() {
 
   const handleJoin = async () => {
     if (!group) return;
+    if (!isSignedIn()) {
+      Alert.alert('ログインが必要です', 'グループに参加するにはログインしてください。', [
+        { text: 'あとで', style: 'cancel' },
+        { text: 'ログイン', onPress: () => navigation.navigate('Login', { reason: 'group' }) },
+      ]);
+      return;
+    }
     setBusy(true);
     try {
       if (group.requiresApproval) {

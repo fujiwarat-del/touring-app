@@ -52,6 +52,7 @@ import GroupDetailScreen from './src/screens/GroupDetailScreen';
 import PlansScreen from './src/screens/PlansScreen';
 import PlanFormScreen from './src/screens/PlanFormScreen';
 import PlanDetailScreen from './src/screens/PlanDetailScreen';
+import LoginScreen from './src/screens/LoginScreen';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {
@@ -91,6 +92,7 @@ export type RootStackParamList = {
   GroupDetail: { groupId: string };
   PlanForm: { planId?: string };
   PlanDetail: { planId: string };
+  Login: { reason?: 'post' | 'follow' | 'group' | 'plan' } | undefined;
   // マイページ配下に移動した画面
   Garage: undefined;
   Album: undefined;
@@ -303,6 +305,11 @@ function AppNavigator() {
         />
         <Stack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ headerShown: true, title: 'ツーリング計画', ...headerOpts }} />
         <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{ headerShown: true, title: 'ログイン', presentation: 'modal', ...headerOpts }}
+        />
+        <Stack.Screen
           name="FollowList"
           component={FollowListScreen}
           options={({ route }) => ({
@@ -318,12 +325,21 @@ function AppNavigator() {
 
 export default function App() {
   useEffect(() => {
+    // Firebase のログイン状態を監視し、既存サービス側へUIDを反映する。
+    // 永続化済みセッションはここで復元されるため、再ログインは不要。
+    let unsubscribe: (() => void) | undefined;
+    import('./src/services/auth').then(({ onFirebaseAuthChanged }) => {
+      unsubscribe = onFirebaseAuthChanged(() => {});
+    }).catch(() => {});
+
     registerForPushNotifications().then(() => {
       // 期日リマインダー（車検・自賠責・任意保険・免許証）を最新データで再登録
       import('./src/services/reminders').then(({ rescheduleAllReminders }) =>
         rescheduleAllReminders().catch(() => {})
       );
     });
+
+    return () => unsubscribe?.();
   }, []);
 
   return (

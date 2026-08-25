@@ -1,22 +1,34 @@
 rules_version = '2';
 
 // ============================================================
-// 【暫定ルール】Firebase Auth 未導入のため認証チェックなしで運用
+// 【移行期ルール】Firebase Auth 導入直後の段階的ルール
 //
-// アプリは AsyncStorage の匿名UIDを使用しており request.auth が常に null。
-// そのため isOwner() ベースの本来ルール（firestore.rules）は適用できない。
-// 正式リリース前に Firebase 匿名認証を導入し、firestore.rules へ切り替えること。
+// 方針:
+//   閲覧      … 全員に許可（未ログインでもフィードを見られる状態を維持）
+//   SNS機能   … ログイン必須（投稿・グループ・計画）＝ なりすまし防止
+//   個人機能  … 未ログインでも利用可（ガレージ・アルバム・チェックリスト）
 //
-// 方針: アプリが実際に使うコレクションのみ許可し、それ以外はすべて拒否。
-//       クライアントから改ざんされたくないフィールド（banned）だけは保護。
+// 【残る課題】
+// フォロー機能は相手ユーザーの followers サブコレクションへ書き込むため、
+// users/** に「自分のパスのみ」という制限をかけられない。
+// 完全なオーナー制限には followers 側の同期を Cloud Functions へ移す必要がある。
+// それまではアプリ側のガードとログイン必須化で実質的な抑止としている。
 // ============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // コミュニティ投稿（読み書き・いいね・削除）
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // コミュニティ投稿
+    // 作成は本人のみ。更新はいいね等があるため緩め、削除は投稿者のみ。
     match /communityPosts/{postId} {
-      allow read, create, update, delete: if true;
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if signedIn();
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     // ユーザープロフィール（プッシュトークン・写真・バイク一覧・BANフラグ）
@@ -29,23 +41,24 @@ service cloud.firestore {
     }
 
     // ユーザーデータ（保存ルート・ガレージ・チェックリスト・アルバム・フォロー関係）
-    // ※ フォロー機能は相手の followers サブコレクションへ書き込むため
-    //   認証導入までは users/** を許可する必要がある。
-    //   認証後は「自分の following のみ書込可」＋followers は Functions 同期へ移行する。
+    // ガレージ等はログインなしでも使える機能のため書き込みを開けている。
+    // 旧UIDからの移行処理もこのパスを読み書きする。
     match /users/{userId}/{document=**} {
       allow read, write: if true;
     }
 
-    // グループ（本体・メンバー・参加申請）
+    // グループ（本体・メンバー・参加申請）— 参加・作成はログイン必須
     match /groups/{groupId}/{document=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if signedIn();
     }
 
-    // ツーリング計画（本体・参加者・参加申請）
+    // ツーリング計画（本体・参加者・参加申請）— 募集・参加はログイン必須
     // ※ 公開範囲（フォロワーのみ / グループ限定）の絞り込みは現状クライアント側。
-    //   認証導入後にここでサーバー側の絞り込みへ移行すること。
+    //   厳密な秘匿にはサーバー側での判定が必要（今後の課題）。
     match /plans/{planId}/{document=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if signedIn();
     }
 
     // UGC通報（作成のみ。閲覧・対応は Firebase Console から）

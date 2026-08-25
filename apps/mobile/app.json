@@ -17,6 +17,8 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.touringplanner.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "ツーリングルート生成のために現在地を取得します。",
         "NSLocationAlwaysUsageDescription": "ツーリング中のルート追跡のために位置情報を使用します。",
@@ -31,6 +33,7 @@
         "backgroundColor": "#1D9E75"
       },
       "package": "com.touringplanner.app",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -46,6 +49,8 @@
     "plugins": [
       "expo-location",
       "expo-image-picker",
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin",
       "./plugins/withAndroidBuildConfig",
       [
         "expo-build-properties",

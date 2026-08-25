@@ -21,7 +21,7 @@ import { COLORS } from '../theme/colors';
 import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacing';
 import { useTheme } from '../theme/ThemeContext';
 import { uploadPhotos } from '../services/cloudinaryService';
-import { postCommunityRoute, hasAcceptedUgcTerms, acceptUgcTerms } from '../services/firebase';
+import { postCommunityRoute, hasAcceptedUgcTerms, acceptUgcTerms, isSignedIn } from '../services/firebase';
 import { PREFECTURES_BY_AREA } from '@touring/shared';
 import { StarInput } from '../components/StarRating';
 
@@ -126,6 +126,14 @@ export default function PostScreen() {
   };
 
   const handlePost = useCallback(async () => {
+    // 投稿にはログインが必要（なりすまし防止・投稿の所有者を確定させるため）
+    if (!isSignedIn()) {
+      Alert.alert('ログインが必要です', 'ルートを投稿するにはログインしてください。', [
+        { text: 'あとで', style: 'cancel' },
+        { text: 'ログイン', onPress: () => (navigation as any).navigate('Login', { reason: 'post' }) },
+      ]);
+      return;
+    }
     if (!routeName.trim()) {
       Alert.alert('ルート名を入力してください');
       return;

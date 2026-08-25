@@ -95,6 +95,7 @@ export default function ProfileScreen() {
   const [showLicensePicker, setShowLicensePicker] = useState(false);
 
   // ライダー情報（ツーリング歴・走行エリア・自己紹介）
+  const [signedIn, setSignedIn] = useState(false);
   const [followCounts, setFollowCounts] = useState({ following: 0, followers: 0 });
   const [rider, setRider] = useState<RiderProfile>({ touringYears: null, ridingAreas: [], bio: null });
   const [bioInput, setBioInput] = useState('');
@@ -162,6 +163,8 @@ export default function ProfileScreen() {
   useEffect(() => {
     const unsubscribe = onAuthChanged((u) => {
       setUser(u);
+      // isAnonymous=false は Firebase 認証済み（setAuthedUser 経由）を意味する
+      setSignedIn(!!u && u.isAnonymous === false);
       setLoading(false);
       if (u) {
         setStatsLoading(true);
@@ -216,24 +219,23 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignIn = async () => {
-    try {
-      await ensureAnonymousAuth();
-    } catch (err: any) {
-      Alert.alert('ログインエラー', err.message ?? 'ログインに失敗しました');
-    }
+  const handleSignIn = () => {
+    navigation.navigate('Login', undefined);
   };
 
   const handleSignOut = () => {
     Alert.alert(
-      'サインアウト',
-      'サインアウトしますか？保存済みルートはログアウト後にアクセスできなくなります。',
+      'ログアウト',
+      'ログアウトしますか？\n\n投稿・ガレージ・アルバムのデータはアカウントに残るので、次回ログインすれば元どおり表示されます。',
       [
         { text: 'キャンセル', style: 'cancel' },
         {
-          text: 'サインアウト',
+          text: 'ログアウト',
           style: 'destructive',
-          onPress: () => signOutUser(),
+          onPress: async () => {
+            const { signOutFirebase } = await import('../services/auth');
+            await signOutFirebase();
+          },
         },
       ]
     );
@@ -306,25 +308,28 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            <Text style={[styles.email, { color: colors.textSecondary }]}>{'匿名ユーザー'}</Text>
-            <Text style={[styles.uid, { color: colors.textMuted }]}>
-              ID: {user?.uid?.slice(0, 12) ?? 'ログインが必要です'}...
+            <Text style={[styles.email, { color: colors.textSecondary }]}>
+              {signedIn ? 'ログイン中' : '未ログイン'}
             </Text>
           </View>
         </View>
 
         {/* Auth actions */}
-        {!user ? (
-          <TouchableOpacity style={[styles.signInBtn, { backgroundColor: colors.primary }]} onPress={handleSignIn}>
-            <Text style={styles.signInBtnText}>🔐 匿名でサインイン</Text>
-          </TouchableOpacity>
-        ) : user.isAnonymous ? (
-          <View style={[styles.infoCard, { backgroundColor: colors.infoLight }]}>
-            <Text style={[styles.infoText, { color: colors.info }]}>
-              💡 匿名ユーザーとしてご利用中です。ルートの保存やコミュニティ投稿が可能です。
+        {!signedIn && (
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🔐 ログイン</Text>
+            <Text style={[styles.riderHint, { color: colors.textMuted }]}>
+              投稿・フォロー・グループ参加にはログインが必要です。{'\n'}
+              この端末に保存されているデータはログイン時に引き継がれます。
             </Text>
+            <TouchableOpacity
+              style={[styles.signInBtn, { backgroundColor: colors.primary }]}
+              onPress={handleSignIn}
+            >
+              <Text style={styles.signInBtnText}>ログイン / 新規登録</Text>
+            </TouchableOpacity>
           </View>
-        ) : null}
+        )}
 
         {/* Badge section */}
         <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
@@ -809,10 +814,10 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Sign out */}
-        {user && (
+        {/* Sign out（ログイン中のみ） */}
+        {signedIn && (
           <TouchableOpacity style={[styles.signOutBtn, { borderColor: COLORS.danger }]} onPress={handleSignOut}>
-            <Text style={styles.signOutBtnText}>サインアウト</Text>
+            <Text style={styles.signOutBtnText}>ログアウト</Text>
           </TouchableOpacity>
         )}
 

@@ -29,6 +29,7 @@ import {
 } from '../services/plans';
 import type { TouringPlan, Participant, PlanApplication, ParticipationState } from '../services/plans';
 import { formatTouringYears } from '../services/riderProfile';
+import { isSignedIn } from '../services/firebase';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanDetail'>;
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -80,6 +81,13 @@ export default function PlanDetailScreen() {
 
   const handleJoin = async () => {
     if (!plan) return;
+    if (!isSignedIn()) {
+      Alert.alert('ログインが必要です', 'ツーリングに参加するにはログインしてください。', [
+        { text: 'あとで', style: 'cancel' },
+        { text: 'ログイン', onPress: () => navigation.navigate('Login', { reason: 'plan' }) },
+      ]);
+      return;
+    }
     if (plan.visibility === 'approval') {
       setApplyModal(true);
       return;

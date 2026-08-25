@@ -90,3 +90,7 @@ package-lock.json
 
 .vercel
 .env*.local
+
+# Firebase 設定ファイル（OAuthクライアント情報を含むためコミットしない）
+google-services.json
+GoogleService-Info.plist

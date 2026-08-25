@@ -87,7 +87,8 @@ const PHOTO_URL_KEY = '@touring_app_photo_url';
 export interface AnonUser {
   uid: string;
   displayName: string;
-  isAnonymous: true;
+  /** true = 未ログイン（端末内IDでの閲覧のみ）/ false = Firebase認証済み */
+  isAnonymous: boolean;
 }
 
 let _cachedUser: AnonUser | null = null;
@@ -97,7 +98,35 @@ function _notifyCallbacks(user: AnonUser | null) {
   _authCallbacks.forEach((cb) => cb(user));
 }
 
+// ─── Firebase Auth との橋渡し ────────────────────────────────
+// 循環importを避けるため、auth.ts 側から setAuthedUser() を呼んで反映させる。
+// これにより既存の ensureAnonymousAuth() 利用箇所を書き換えずに
+// UID を Firebase のものへ切り替えられる。
+let _firebaseUser: { uid: string; displayName: string } | null = null;
+
+export function setAuthedUser(user: { uid: string; displayName: string } | null): void {
+  _firebaseUser = user;
+  _cachedUser = user
+    ? { uid: user.uid, displayName: user.displayName, isAnonymous: false }
+    : null;
+  _notifyCallbacks(_cachedUser);
+}
+
+/** ログイン中か（投稿・フォロー等の操作可否の判定に使う） */
+export function isSignedIn(): boolean {
+  return _firebaseUser !== null;
+}
+
 export async function ensureAnonymousAuth(): Promise<AnonUser> {
+  // Firebase認証済みならそのUIDを最優先で使う
+  if (_firebaseUser) {
+    _cachedUser = {
+      uid: _firebaseUser.uid,
+      displayName: _firebaseUser.displayName,
+      isAnonymous: false,
+    };
+    return _cachedUser;
+  }
   if (_cachedUser) return _cachedUser;
 
   const [storedUid, storedName] = await Promise.all([

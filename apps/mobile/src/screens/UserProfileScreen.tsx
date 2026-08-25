@@ -28,6 +28,7 @@ import {
   getUserPhotoUrl,
   ensureAnonymousAuth,
   blockUser,
+  isSignedIn,
 } from '../services/firebase';
 import type { BikeRecord } from '../services/firebase';
 import { getRiderProfile, formatTouringYears } from '../services/riderProfile';
@@ -86,6 +87,13 @@ export default function UserProfileScreen() {
   }, [userId]);
 
   const handleToggleFollow = async () => {
+    if (!isSignedIn()) {
+      Alert.alert('ログインが必要です', 'フォローするにはログインしてください。', [
+        { text: 'あとで', style: 'cancel' },
+        { text: 'ログイン', onPress: () => navigation.navigate('Login', { reason: 'follow' }) },
+      ]);
+      return;
+    }
     setFollowBusy(true);
     const wasFollowing = following;
     // 楽観的更新
