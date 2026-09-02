@@ -94,3 +94,7 @@ package-lock.json
 # Firebase 設定ファイル（OAuthクライアント情報を含むためコミットしない）
 google-services.json
 GoogleService-Info.plist
+
+# ビルド成果物（リポジトリに入れない）
+*.apk
+*.aab
