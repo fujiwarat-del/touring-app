@@ -11,6 +11,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   initializeAuth,
+  getAuth,
   GoogleAuthProvider,
   OAuthProvider,
   signInWithCredential,
@@ -40,24 +41,75 @@ const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
 // アプリ再起動でログイン状態が消える
 let _auth: Auth | null = null;
 
+// 初期化に失敗した理由を保持する。以前は catch {} で2段とも握り潰しており
+// 「Firebase が未設定です」しか出ずに原因が追えなかったため、
+// 実際の例外を残してUIまで持ち上げる。
+let _authInitError: string | null = null;
+
+export function getAuthInitError(): string | null {
+  return _authInitError;
+}
+
+function errText(e: unknown): string {
+  const anyE = e as any;
+  return anyE?.code ? `${anyE.code}: ${anyE.message}` : (anyE?.message ?? String(e));
+}
+
 export function getFirebaseAuth(): Auth | null {
   if (_auth) return _auth;
+  _authInitError = null;
+
   const app = getFirebaseApp();
-  if (!app) return null;
-  try {
-    _auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
-  } catch {
-    // 既に初期化済みの場合（Fast Refresh 等）
-    try {
-      const { getAuth } = require('firebase/auth');
-      _auth = getAuth(app);
-    } catch {
-      return null;
-    }
+  if (!app) {
+    _authInitError =
+      'Firebase App が初期化されていません（EXPO_PUBLIC_FIREBASE_API_KEY / PROJECT_ID が空）';
+    return null;
   }
-  return _auth;
+
+  // 永続化は取得できなければ諦める。永続化なしでもサインイン自体は成立するので、
+  // ここで失敗して全体を止めるのは損（再起動でログアウトされるだけ）。
+  let persistence: unknown = undefined;
+  try {
+    persistence = getReactNativePersistence?.(AsyncStorage);
+  } catch (e) {
+    _authInitError = `getReactNativePersistence 失敗: ${errText(e)}`;
+  }
+  if (!persistence && !_authInitError) {
+    _authInitError = 'getReactNativePersistence が undefined（firebase/auth の解決先が RN ビルドでない）';
+  }
+
+  const errors: string[] = [];
+  if (_authInitError) errors.push(_authInitError);
+
+  try {
+    _auth = persistence
+      ? initializeAuth(app, { persistence: persistence as any })
+      : initializeAuth(app);
+    _authInitError = null;
+    return _auth;
+  } catch (e) {
+    errors.push(`initializeAuth: ${errText(e)}`);
+  }
+
+  // 既に初期化済み（auth/already-initialized）などはこちらで拾える
+  try {
+    _auth = getAuth(app);
+    _authInitError = null;
+    return _auth;
+  } catch (e) {
+    errors.push(`getAuth: ${errText(e)}`);
+  }
+
+  _authInitError = errors.join(' / ');
+  console.error('[Auth] 初期化失敗:', _authInitError);
+  return null;
+}
+
+/** ログイン処理の入口で使う。null のときは理由込みで例外にする。 */
+function requireAuth(): Auth {
+  const auth = getFirebaseAuth();
+  if (!auth) throw new Error(`認証を初期化できません — ${_authInitError ?? '原因不明'}`);
+  return auth;
 }
 
 let googleConfigured = false;
@@ -70,8 +122,10 @@ function configureGoogle() {
 // ─── サインイン ──────────────────────────────────────────
 
 export async function signInWithGoogle(): Promise<User> {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error('Firebase が未設定です');
+  const auth = requireAuth();
+  if (!WEB_CLIENT_ID) {
+    throw new Error('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID が未設定です');
+  }
   configureGoogle();
 
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -87,8 +141,7 @@ export async function signInWithGoogle(): Promise<User> {
 }
 
 export async function signInWithApple(): Promise<User> {
-  const auth = getFirebaseAuth();
-  if (!auth) throw new Error('Firebase が未設定です');
+  const auth = requireAuth();
 
   // Apple はリプレイ攻撃防止に nonce を要求する。
   // 生の nonce を Apple へは SHA256 で、Firebase へは生のまま渡す。
