@@ -161,7 +161,7 @@ export function onFirebaseAuthChanged(cb: (user: User | null) => void): () => vo
     return () => {};
   }
   return onAuthStateChanged(auth, (user) => {
-    // 既存サービス（ensureAnonymousAuth を使う全機能）へUIDを反映する
+    // 既存サービス（requireAuthedUser を使う全機能）へUIDを反映する
     setAuthedUser(
       user ? { uid: user.uid, displayName: displayNameOf(user) } : null
     );

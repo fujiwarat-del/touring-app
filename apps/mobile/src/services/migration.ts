@@ -200,7 +200,13 @@ export async function migrateLegacyData(
   }
 
   // ── 6) 自分をフォローしている人の following エントリを付け替え ──
-  // 旧UIDを指したままだと相手のフォロー中一覧から辿れなくなる
+  // 旧UIDを指したままだと相手のフォロー中一覧から辿れなくなる。
+  //
+  // 【既知の制約】この書き込み先は「他人の following」であり、Firestore ルールは
+  // これを拒否する（自分の following しか書けない）。したがって現状この処理は
+  // 必ず失敗し、errors に 'followerLinks' が記録される。相手のフォロー中一覧は
+  // 旧UIDを指したまま残る。サーバー側（Admin SDK）でしか直せないため、
+  // 移行が必要な規模になった時点でバッチ処理を用意する。
   try {
     const followers = await getDocs(collection(db(), 'users', legacyUid, 'followers'));
     let n = 0;

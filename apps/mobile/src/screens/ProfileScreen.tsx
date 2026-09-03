@@ -35,7 +35,7 @@ import { SPACING, FONT_SIZE, RADIUS, FONT_WEIGHT, SHADOW } from '../theme/spacin
 import { useTheme, ACCENT_THEMES } from '../theme/ThemeContext';
 import type { ThemeMode, ThemeColorKey } from '../theme/ThemeContext';
 import {
-  ensureAnonymousAuth, onAuthChanged, signOutUser, updateDisplayName,
+  onAuthChanged, signOutUser, updateDisplayName, isSignedIn,
   getUserPostStats, syncUserBikesToFirestore,
   updateUserPhotoUrl, getMyPhotoUrl,
 } from '../services/firebase';
@@ -221,6 +221,25 @@ export default function ProfileScreen() {
 
   const handleSignIn = () => {
     navigation.navigate('Login', undefined);
+  };
+
+  /**
+   * ガレージ・アルバム・保存したルートはいずれも users/{uid} 配下に書き込む。
+   * Firestore ルールが「本人のみ書き込み可」になったため、ログイン必須にする。
+   */
+  const openMyContent = (screen: 'Garage' | 'Album' | 'Saved', label: string) => {
+    if (!isSignedIn()) {
+      Alert.alert(
+        'ログインが必要です',
+        `${label}はアカウントに紐づいて保存されます。ログインしてご利用ください。`,
+        [
+          { text: 'あとで', style: 'cancel' },
+          { text: 'ログイン', onPress: () => navigation.navigate('Login', undefined) },
+        ]
+      );
+      return;
+    }
+    navigation.navigate(screen);
   };
 
   const handleSignOut = () => {
@@ -517,7 +536,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             key={item.screen}
             style={[styles.linkRow, { backgroundColor: colors.cardBg }]}
-            onPress={() => navigation.navigate(item.screen)}
+            onPress={() => openMyContent(item.screen, item.label)}
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.linkRowText, { color: colors.textPrimary }]}>

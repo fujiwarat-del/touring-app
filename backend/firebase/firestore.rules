@@ -1,131 +1,228 @@
 rules_version = '2';
+
+// ============================================================
+// 【本番ルール】SNS/コミュニティ版
+//
+// 方針:
+//   閲覧    … 公開情報（投稿・プロフィール・フォロー関係・グループ・計画）は
+//             未ログインでも読める。個人データ（ガレージ・アルバム・保存ルート）は本人のみ。
+//   書込    … 原則ログイン必須。かつ「自分のもの」だけ。
+//   例外    … 他人の領域へ書く必要がある操作は、書ける範囲をピンポイントに限定する
+//             (1) フォロー: 相手の followers に「自分のドキュメント」だけ作れる
+//             (2) グループ: オーナーはメンバーの所属一覧を操作できる
+//
+// 【前提】未ログインユーザーも Firebase Auth の匿名認証で request.auth を持つこと。
+// 端末内で自前生成したUID（AsyncStorage）のままだと request.auth == null になり、
+// ガレージ・アルバム・チェックリストが書き込めなくなる。
+// ============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ============================================================
-    // Helper functions
-    // ============================================================
-
-    function isAuthenticated() {
+    // ── ヘルパー ────────────────────────────────────────
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
     }
 
-    function isValidRoute() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['name', 'distance', 'time', 'difficulty'])
-        && data.name is string
-        && data.name.size() > 0
-        && data.name.size() < 200;
+    function groupDoc(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data;
     }
 
-    function isValidCommunityPost() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['userId', 'route', 'comment', 'createdAt'])
-        && data.userId is string
-        && data.comment is string
-        && data.comment.size() < 1000
-        && data.userId == request.auth.uid;
+    function isGroupOwner(groupId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/groups/$(groupId))
+        && groupDoc(groupId).ownerId == request.auth.uid;
+    }
+
+    function planDoc(planId) {
+      return get(/databases/$(database)/documents/plans/$(planId)).data;
+    }
+
+    function isPlanOwner(planId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/plans/$(planId))
+        && planDoc(planId).ownerId == request.auth.uid;
+    }
+
+    /** 変更されたフィールドが許可リストの範囲内か */
+    function onlyChanges(allowed) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
     }
 
     // ============================================================
-    // Users collection
+    // ユーザー個人データ
     // ============================================================
-
     match /users/{userId} {
-      // Users can read/write only their own document
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId);
+      allow read, write: if isSelf(userId);
 
-      // Saved routes subcollection
+      // ── 保存ルート・ガレージ・アルバム: 本人のみ ──
       match /savedRoutes/{routeId} {
-        // Users can read/write/delete their own saved routes
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidRoute();
-        allow update: if isOwner(userId);
-        allow delete: if isOwner(userId);
+        allow read, write: if isSelf(userId);
       }
 
-      // ガレージ（愛車）subcollection — 自分のみ読み書き可
       match /bikes/{bikeId} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if isSelf(userId);
 
-        // ツーリング前チェックリスト履歴
+        // 出発前チェックリストの履歴は不変（作成と削除のみ）
         match /checklists/{checklistId} {
-          allow read, create, delete: if isOwner(userId);
-          allow update: if false; // 履歴は不変（作成と削除のみ）
+          allow read, create, delete: if isSelf(userId);
+          allow update: if false;
         }
       }
 
-      // ツーリングアルバム（走行ログ）— 自分のみ読み書き可
       match /tours/{tourId} {
-        allow read, write: if isOwner(userId)
-          && (!('photos' in request.resource.data) || request.resource.data.photos.size() <= 10);
+        allow read, write: if isSelf(userId);
+      }
+
+      // ── フォロー関係 ──
+      // 一覧・件数は他人のプロフィール画面から参照するため閲覧は公開。
+      match /following/{targetUid} {
+        allow read: if true;
+        allow write: if isSelf(userId);
+      }
+
+      // 相手の followers に書けるのは「自分自身のドキュメント」だけ。
+      // これによりフォロー/解除をクライアントから行いつつ、
+      // 他人になりすまして第三者のフォロワー一覧を汚すことはできない。
+      match /followers/{followerUid} {
+        allow read: if true;
+        allow write: if isSelf(userId) || isSelf(followerUid);
+      }
+
+      // ── グループ所属一覧（非正規化） ──
+      // 本人のほか、グループオーナーが操作する:
+      //   参加申請の承認 / メンバー削除 / グループ削除時の一括クリーンアップ
+      match /groups/{groupId} {
+        allow read: if isSelf(userId);
+        allow write: if isSelf(userId) || isGroupOwner(groupId);
       }
     }
 
     // ============================================================
-    // Community posts collection
+    // コミュニティ投稿
     // ============================================================
-
     match /communityPosts/{postId} {
-      // Anyone authenticated can read community posts
-      allow read: if isAuthenticated();
+      allow read: if true;
 
-      // Only the post owner can create posts
-      allow create: if isAuthenticated()
-        && isValidCommunityPost()
-        && request.resource.data.photos.size() <= 10;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
 
-      // Post owner can update (edit comment, etc.)
-      // Any authenticated user can like (update likes and likedBy only)
-      allow update: if isAuthenticated() && (
-        // Owner updates
-        isOwner(resource.data.userId) ||
-        // Like toggle: only likes and likedBy fields change
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy'])
-          && request.resource.data.likes is int
-          && request.resource.data.likes >= 0)
+      // 投稿者は自由に更新可。それ以外はリアクション系フィールドのみ。
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid
+        || onlyChanges(['likes', 'likedBy', 'reactions'])
       );
 
-      // Only the post owner can delete their post
-      allow delete: if isOwner(resource.data.userId);
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     // ============================================================
-    // Reports（UGC通報）— App Store 審査ガイドライン 1.2 対応
-    // クライアントは作成のみ。閲覧・対応は Firebase Console から行う
-    // ※ アプリは Firebase Auth 未使用（AsyncStorage匿名UID）のため未認証で許可
+    // ユーザープロフィール（公開情報 + プッシュトークン）
+    // banned フィールドはクライアントから変更不可（Firebase Console のみ）
     // ============================================================
-
-    match /reports/{reportId} {
-      allow create: if request.resource.data.keys().hasAll(['postId', 'reporterUid', 'reason', 'createdAt'])
-        && request.resource.data.reason is string
-        && request.resource.data.reason.size() < 200;
-      allow read, update, delete: if false; // 運営のみ（Firebase Console / Admin SDK）
-    }
-
-    // ============================================================
-    // User profiles（プッシュトークン・プロフィール写真・BANフラグ）
-    // banned フィールドは Firebase Console から手動設定
-    // ============================================================
-
     match /userProfiles/{userId} {
       allow read: if true;
-      // banned フィールドはクライアントから変更不可
-      allow write: if !request.resource.data.diff(resource.data).affectedKeys().hasAny(['banned']);
+      allow create: if isSelf(userId) && !('banned' in request.resource.data);
+      allow update: if isSelf(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['banned']);
+      allow delete: if false;
     }
 
     // ============================================================
-    // App config (read-only for authenticated users)
+    // グループ
     // ============================================================
+    match /groups/{groupId} {
+      allow read: if true;
 
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      // オーナーは自由に更新可。参加・退会に伴う memberCount の増減は
+      // 一般メンバーからの更新も許可する。
+      allow update: if signedIn() && (
+        resource.data.ownerId == request.auth.uid
+        || onlyChanges(['memberCount'])
+      );
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      // メンバー: 本人の参加/退会と、オーナーによる追加/削除
+      match /members/{memberUid} {
+        allow read: if true;
+        allow write: if isSelf(memberUid) || isGroupOwner(groupId);
+      }
+
+      // 参加申請: 申請は本人のみ。閲覧・却下はオーナーと本人。
+      match /joinRequests/{applicantUid} {
+        allow read: if isSelf(applicantUid) || isGroupOwner(groupId);
+        allow create: if isSelf(applicantUid);
+        allow update: if false;
+        allow delete: if isSelf(applicantUid) || isGroupOwner(groupId);
+      }
+    }
+
+    // ============================================================
+    // ツーリング計画（募集）
+    //
+    // ※ visibility（followers / group 限定）の絞り込みは依然クライアント側。
+    //   ルールで秘匿するには主催者のフォロワー判定に get() が必要で、
+    //   一覧クエリでは評価できないため、別途データ構造の見直しが要る。
+    // ============================================================
+    match /plans/{planId} {
+      allow read: if true;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if signedIn() && (
+        resource.data.ownerId == request.auth.uid
+        || onlyChanges(['participantCount'])
+      );
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      // 参加者: 本人の参加/キャンセルと、主催者による承認/削除
+      match /participants/{participantUid} {
+        allow read: if true;
+        allow write: if isSelf(participantUid) || isPlanOwner(planId);
+      }
+
+      // 参加申請: 申請は本人のみ。閲覧・却下は主催者と本人。
+      match /applications/{applicantUid} {
+        allow read: if isSelf(applicantUid) || isPlanOwner(planId);
+        allow create: if isSelf(applicantUid);
+        allow update: if false;
+        allow delete: if isSelf(applicantUid) || isPlanOwner(planId);
+      }
+    }
+
+    // ============================================================
+    // UGC通報（作成のみ。閲覧・対応は Firebase Console から）
+    // ============================================================
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['postId', 'reporterUid', 'reason'])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() < 200;
+      allow read, update, delete: if false;
+    }
+
+    // ============================================================
+    // アプリ設定（読み取りのみ）
+    // ============================================================
     match /appConfig/{configId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Admin only via Firebase Admin SDK
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // それ以外はすべて拒否
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -30,7 +30,7 @@ import {
   getPopularRoutes,
   toggleLike,
   deleteCommunityPost,
-  ensureAnonymousAuth,
+  getCurrentUid,
   toggleReaction,
   getMyReactions,
   toggleBookmark,
@@ -77,7 +77,7 @@ export default function CommunityScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    ensureAnonymousAuth().then((u) => setMyUid(u.uid)).catch(() => {});
+    setMyUid(getCurrentUid());
     getMyReactions().then(setMyReactions).catch(() => {});
     getBookmarkedIds().then((ids) => setBookmarkedIds(new Set(ids))).catch(() => {});
   }, []);

@@ -26,7 +26,7 @@ import {
   getUserPostStats,
   getUserBikesFromFirestore,
   getUserPhotoUrl,
-  ensureAnonymousAuth,
+  getCurrentUid,
   blockUser,
   isSignedIn,
 } from '../services/firebase';
@@ -59,7 +59,7 @@ export default function UserProfileScreen() {
   const [postsLoading, setPostsLoading] = useState(true);
 
   useEffect(() => {
-    ensureAnonymousAuth().then((u) => setMyUid(u.uid)).catch(() => {});
+    setMyUid(getCurrentUid());
   }, []);
 
   // stats・バイク・写真は独立してロード

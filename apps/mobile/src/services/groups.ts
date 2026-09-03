@@ -26,7 +26,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { getFirestoreDb, ensureAnonymousAuth, getMyPhotoUrl } from './firebase';
+import { getFirestoreDb, requireAuthedUser, getCurrentUid, getMyPhotoUrl } from './firebase';
 import { buildRiderCredentials } from './riderProfile';
 import type { RiderCredentials } from './riderProfile';
 
@@ -92,7 +92,7 @@ function mapGroup(id: string, d: Record<string, any>): Group {
 // ─── グループ CRUD ───────────────────────────────────────
 
 export async function createGroup(input: GroupInput): Promise<string> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const photoUrl = await getMyPhotoUrl().catch(() => null);
 
   const ref = await addDoc(collection(db(), 'groups'), {
@@ -174,7 +174,7 @@ export async function getAllGroups(limitCount = 50): Promise<Group[]> {
 
 /** 自分が所属しているグループ */
 export async function getMyGroups(): Promise<Group[]> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const snap = await getDocs(collection(db(), 'users', me.uid, 'groups'));
   const ids = snap.docs.map((d) => d.id);
   if (ids.length === 0) return [];
@@ -185,8 +185,9 @@ export async function getMyGroups(): Promise<Group[]> {
 /** 自分が所属しているグループIDの集合（計画の公開範囲判定に使う） */
 export async function getMyGroupIds(): Promise<string[]> {
   try {
-    const me = await ensureAnonymousAuth();
-    const snap = await getDocs(collection(db(), 'users', me.uid, 'groups'));
+    const uid = getCurrentUid();
+    if (!uid) return [];
+    const snap = await getDocs(collection(db(), 'users', uid, 'groups'));
     return snap.docs.map((d) => d.id);
   } catch {
     return [];
@@ -217,7 +218,9 @@ export type MembershipState = 'member' | 'owner' | 'requested' | 'none';
 
 export async function getMyMembership(groupId: string): Promise<MembershipState> {
   try {
-    const me = await ensureAnonymousAuth();
+    const uid = getCurrentUid();
+    if (!uid) return 'none'; // 未ログインは参加状態を持たない
+    const me = { uid };
     const member = await getDoc(doc(db(), 'groups', groupId, 'members', me.uid));
     if (member.exists()) {
       return member.data().role === 'owner' ? 'owner' : 'member';
@@ -231,7 +234,7 @@ export async function getMyMembership(groupId: string): Promise<MembershipState>
 
 /** 誰でも参加できるグループに参加する */
 export async function joinGroup(group: Group): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const photoUrl = await getMyPhotoUrl().catch(() => null);
   await Promise.all([
     setDoc(doc(db(), 'groups', group.id, 'members', me.uid), {
@@ -251,7 +254,7 @@ export async function joinGroup(group: Group): Promise<void> {
 
 /** グループを退会する */
 export async function leaveGroup(groupId: string): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   await Promise.all([
     deleteDoc(doc(db(), 'groups', groupId, 'members', me.uid)),
     deleteDoc(doc(db(), 'users', me.uid, 'groups', groupId)),
@@ -272,7 +275,7 @@ export async function removeMember(groupId: string, uid: string): Promise<void> 
 
 /** 参加申請を送る。バイク種別・経験年数が自動で添付される */
 export async function requestToJoin(groupId: string, message: string): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const [photoUrl, credentials] = await Promise.all([
     getMyPhotoUrl().catch(() => null),
     buildRiderCredentials().catch(() => null),
@@ -288,7 +291,7 @@ export async function requestToJoin(groupId: string, message: string): Promise<v
 
 /** 参加申請を取り消す */
 export async function cancelJoinRequest(groupId: string): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   await deleteDoc(doc(db(), 'groups', groupId, 'joinRequests', me.uid));
 }
 

@@ -65,29 +65,23 @@ service firebase.storage {
     // ツーリングアルバム写真
     // users/{userId}/tours/{tourId}/{photoId}.jpg
     //
-    // 【暫定ルール】アプリは Firebase Auth 未使用（AsyncStorage匿名UID）のため
-    // request.auth によるオーナーチェックが現状機能しない。
-    // 1MB上限＋画像のみの制限で当面運用し、Firebase 匿名認証の導入後に
-    // 下のコメントアウト版（本来ルール）へ切り替えること。
+    // 書き込み・削除は本人のみ（アルバムはログイン必須機能）。
+    //
+    // read を公開にしているのは意図的:
+    // アルバムの写真は TourDetailScreen からコミュニティ投稿へ流用され
+    // （TourDetailScreen:202）、そのとき渡すのは getDownloadURL() で得た
+    // トークン付きURL。このURLはセキュリティルールを迂回して誰でも取得できる
+    // ため、read を絞っても秘匿性は上がらず、投稿の表示だけが壊れる。
     // ============================================================
 
     match /users/{userId}/tours/{tourId}/{photoId} {
       allow read: if true;
       // 1MB以下の画像のみ（クライアントは長辺1280px/JPEG q0.7 に圧縮済み）
-      allow write: if request.resource != null
+      allow write: if isOwner(userId)
         && isImage()
         && request.resource.size < 1 * 1024 * 1024;
-      allow delete: if true;
+      allow delete: if isOwner(userId);
     }
-
-    // ─── 本来のルール（Firebase Auth 導入後に上のブロックと差し替え） ───
-    // match /users/{userId}/tours/{tourId}/{photoId} {
-    //   allow read: if isAuthenticated();
-    //   allow write: if isOwner(userId)
-    //     && isImage()
-    //     && request.resource.size < 1 * 1024 * 1024;
-    //   allow delete: if isOwner(userId);
-    // }
 
     // ============================================================
     // Block all other paths by default

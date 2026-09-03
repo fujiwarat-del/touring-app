@@ -329,7 +329,11 @@ export default function App() {
     // 永続化済みセッションはここで復元されるため、再ログインは不要。
     let unsubscribe: (() => void) | undefined;
     import('./src/services/auth').then(({ onFirebaseAuthChanged }) => {
-      unsubscribe = onFirebaseAuthChanged(() => {});
+      unsubscribe = onFirebaseAuthChanged((user) => {
+        // プッシュトークンの保存先 userProfiles/{uid} はログイン必須になったため、
+        // 起動時に未ログインだった場合はサインイン後に改めて登録する。
+        if (user) registerForPushNotifications();
+      });
     }).catch(() => {});
 
     registerForPushNotifications().then(() => {

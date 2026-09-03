@@ -32,7 +32,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { getFirestoreDb, ensureAnonymousAuth, getMyPhotoUrl } from './firebase';
+import { getFirestoreDb, requireAuthedUser, getCurrentUid, getMyPhotoUrl } from './firebase';
 import { buildRiderCredentials } from './riderProfile';
 import type { RiderCredentials } from './riderProfile';
 import { getFollowingUids } from './follows';
@@ -129,7 +129,7 @@ function mapPlan(id: string, d: Record<string, any>): TouringPlan {
 // ─── 計画 CRUD ───────────────────────────────────────────
 
 export async function createPlan(input: PlanInput): Promise<string> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const photoUrl = await getMyPhotoUrl().catch(() => null);
 
   const ref = await addDoc(collection(db(), 'plans'), {
@@ -193,7 +193,7 @@ export async function setPlanClosed(planId: string, closed: boolean): Promise<vo
  * 公開範囲に応じてクライアント側で絞り込む（上部コメントの制約を参照）。
  */
 export async function getVisiblePlans(): Promise<TouringPlan[]> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
 
   let all: TouringPlan[];
   try {
@@ -239,7 +239,7 @@ export async function getVisiblePlans(): Promise<TouringPlan[]> {
 
 /** 自分が主催している計画 */
 export async function getMyPlans(): Promise<TouringPlan[]> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const all = await getDocs(collection(db(), 'plans'));
   return all.docs
     .map((d) => mapPlan(d.id, d.data()))
@@ -253,7 +253,9 @@ export type ParticipationState = 'owner' | 'joined' | 'applied' | 'none';
 
 export async function getMyParticipation(planId: string): Promise<ParticipationState> {
   try {
-    const me = await ensureAnonymousAuth();
+    const uid = getCurrentUid();
+    if (!uid) return 'none'; // 未ログインは参加状態を持たない
+    const me = { uid };
     const p = await getDoc(doc(db(), 'plans', planId, 'participants', me.uid));
     if (p.exists()) return p.data().isOwner ? 'owner' : 'joined';
     const a = await getDoc(doc(db(), 'plans', planId, 'applications', me.uid));
@@ -283,7 +285,7 @@ export async function joinPlan(plan: TouringPlan): Promise<void> {
   if (plan.capacity != null && plan.participantCount >= plan.capacity) {
     throw new Error('定員に達しています');
   }
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const [photoUrl, credentials] = await Promise.all([
     getMyPhotoUrl().catch(() => null),
     buildRiderCredentials().catch(() => null),
@@ -299,7 +301,7 @@ export async function joinPlan(plan: TouringPlan): Promise<void> {
 }
 
 export async function leavePlan(planId: string): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   await deleteDoc(doc(db(), 'plans', planId, 'participants', me.uid));
   await updateDoc(doc(db(), 'plans', planId), { participantCount: increment(-1) }).catch(() => {});
 }
@@ -307,7 +309,7 @@ export async function leavePlan(planId: string): Promise<void> {
 // ─── 参加申請（承認制） ──────────────────────────────────
 
 export async function applyToPlan(planId: string, message: string): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   const [photoUrl, credentials] = await Promise.all([
     getMyPhotoUrl().catch(() => null),
     buildRiderCredentials().catch(() => null),
@@ -322,7 +324,7 @@ export async function applyToPlan(planId: string, message: string): Promise<void
 }
 
 export async function cancelApplication(planId: string): Promise<void> {
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   await deleteDoc(doc(db(), 'plans', planId, 'applications', me.uid));
 }
 

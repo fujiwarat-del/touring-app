@@ -25,7 +25,7 @@ import {
   listAll,
   deleteObject,
 } from 'firebase/storage';
-import { getFirestoreDb, getFirebaseApp, ensureAnonymousAuth } from './firebase';
+import { getFirestoreDb, getFirebaseApp, requireAuthedUser } from './firebase';
 import { compressImage } from './imageUtils';
 
 /** 1ツーリングあたりの写真上限（将来、有料プランで無制限化する想定） */
@@ -78,14 +78,14 @@ function tsToIso(v: unknown): string | null {
 async function toursCol() {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firebase が未設定です');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   return { col: collection(db, 'users', user.uid, 'tours'), uid: user.uid };
 }
 
 async function tourDoc(tourId: string) {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firebase が未設定です');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   return { ref: doc(db, 'users', user.uid, 'tours', tourId), uid: user.uid };
 }
 
@@ -203,7 +203,7 @@ export async function uploadTourPhoto(
 ): Promise<TourPhoto> {
   const app = getFirebaseApp();
   if (!app) throw new Error('Firebase が未設定です');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
 
   const compressedUri = await compressImage(localUri);
   const response = await fetch(compressedUri);

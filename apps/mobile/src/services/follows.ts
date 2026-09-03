@@ -5,10 +5,10 @@
 //   users/{myUid}/following/{targetUid}   … 自分がフォローしている相手
 //   users/{targetUid}/followers/{myUid}   … 相手から見たフォロワー
 //
-// 【認証導入前の注意】現在は相手ユーザーの followers サブコレクションへ
-// クライアントから直接書き込んでいる（暫定ルールが users/** を許可）。
-// Firebase Auth 導入後は「自分の following のみ書込可」に絞り、
-// followers 側は Cloud Functions で同期する形へ移行すること。
+// 相手ユーザーの followers サブコレクションへはクライアントから直接書き込むが、
+// Firestore ルールで「ドキュメントIDが自分のUIDのときだけ書ける」と制限している。
+// つまり自分をフォロワーとして足す/外すことしかできず、第三者になりすまして
+// 他人のフォロワー一覧を操作することはできない（Cloud Functions は不要）。
 // ============================================================
 
 import {
@@ -24,7 +24,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
-import { getFirestoreDb, ensureAnonymousAuth } from './firebase';
+import { getFirestoreDb, requireAuthedUser, getCurrentUid } from './firebase';
 
 export interface FollowUser {
   uid: string;
@@ -56,7 +56,7 @@ export async function followUser(
 ): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firebase が未設定です');
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   if (me.uid === targetUid) throw new Error('自分をフォローすることはできません');
 
   const myPhoto = await getMyPhotoUrlSafe();
@@ -81,7 +81,7 @@ export async function followUser(
 export async function unfollowUser(targetUid: string): Promise<void> {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firebase が未設定です');
-  const me = await ensureAnonymousAuth();
+  const me = await requireAuthedUser();
   await Promise.all([
     deleteDoc(doc(db, 'users', me.uid, 'following', targetUid)),
     deleteDoc(doc(db, 'users', targetUid, 'followers', me.uid)),
@@ -93,8 +93,9 @@ export async function isFollowing(targetUid: string): Promise<boolean> {
   const db = getFirestoreDb();
   if (!db) return false;
   try {
-    const me = await ensureAnonymousAuth();
-    const snap = await getDoc(doc(db, 'users', me.uid, 'following', targetUid));
+    const uid = getCurrentUid();
+    if (!uid) return false; // 未ログインではフォロー状態を持たない
+    const snap = await getDoc(doc(db, 'users', uid, 'following', targetUid));
     return snap.exists();
   } catch {
     return false;
@@ -145,8 +146,9 @@ export async function getFollowingUids(): Promise<string[]> {
   const db = getFirestoreDb();
   if (!db) return [];
   try {
-    const me = await ensureAnonymousAuth();
-    const snap = await getDocs(collection(db, 'users', me.uid, 'following'));
+    const uid = getCurrentUid();
+    if (!uid) return [];
+    const snap = await getDocs(collection(db, 'users', uid, 'following'));
     return snap.docs.map((d) => d.id);
   } catch {
     return [];

@@ -18,7 +18,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestoreDb, ensureAnonymousAuth } from './firebase';
+import { getFirestoreDb, requireAuthedUser } from './firebase';
 import type { CheckResultItem } from '../constants/checkItems';
 
 // ─── 型定義 ──────────────────────────────────────────────
@@ -68,14 +68,14 @@ function isoToTs(v: string | null): Timestamp | null {
 async function bikesCol() {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firebase が未設定です');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   return collection(db, 'users', user.uid, 'bikes');
 }
 
 async function bikeDoc(bikeId: string) {
   const db = getFirestoreDb();
   if (!db) throw new Error('Firebase が未設定です');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   return doc(db, 'users', user.uid, 'bikes', bikeId);
 }
 

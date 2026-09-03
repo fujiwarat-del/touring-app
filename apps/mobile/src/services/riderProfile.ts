@@ -8,7 +8,7 @@
 
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestoreDb, ensureAnonymousAuth } from './firebase';
+import { getFirestoreDb, requireAuthedUser, getCurrentUid } from './firebase';
 import { getGarageBikes } from './garage';
 
 /** 主な走行エリア（8地域） */
@@ -54,8 +54,9 @@ export async function getMyRiderProfile(): Promise<RiderProfile> {
   const db = getFirestoreDb();
   if (db) {
     try {
-      const user = await ensureAnonymousAuth();
-      const snap = await getDoc(doc(db, 'userProfiles', user.uid));
+      const uid = getCurrentUid();
+      if (!uid) throw new Error('not signed in'); // → 端末キャッシュへ
+      const snap = await getDoc(doc(db, 'userProfiles', uid));
       if (snap.exists()) {
         const d = snap.data();
         const profile: RiderProfile = {
@@ -100,7 +101,7 @@ export async function updateMyRiderProfile(patch: Partial<RiderProfile>): Promis
 
   const db = getFirestoreDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   await setDoc(
     doc(db, 'userProfiles', user.uid),
     { ...next, displayName: user.displayName, updatedAt: serverTimestamp() },

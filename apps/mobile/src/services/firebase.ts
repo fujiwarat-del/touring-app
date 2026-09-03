@@ -77,7 +77,20 @@ export function getFirebaseApp(): ReturnType<typeof initializeApp> | null {
 }
 
 // ============================================================
-// 匿名ユーザー管理（Firebase Auth不使用・AsyncStorage利用）
+// ユーザー管理（Firebase Auth 前提・未ログインは閲覧専用）
+//
+// 【方針変更の背景】
+// 以前は未ログイン時に端末内でランダムUIDを生成し、それで users/** に
+// 書き込んでいた。この方式では request.auth == null になるため、Firestore
+// ルールに「自分のデータだけ書ける」という制限をかけられず、users/** を
+// 全開放するしかなかった（＝誰でも他人のデータを読み書きできる状態）。
+//
+// 現在は書き込みを伴う機能をすべてログイン必須とし、UID は Firebase Auth の
+// ものだけを使う。閲覧（フィード・グループ・計画・他人のプロフィール）は
+// 未ログインでも可。
+//
+// ANON_UID_KEY は新規生成しなくなったが、旧バージョンで作られた端末内UIDを
+// migration.ts が引き継ぎ元として読むため、キー自体は残し削除もしない。
 // ============================================================
 
 const ANON_UID_KEY = '@touring_app_anon_uid';
@@ -87,8 +100,24 @@ const PHOTO_URL_KEY = '@touring_app_photo_url';
 export interface AnonUser {
   uid: string;
   displayName: string;
-  /** true = 未ログイン（端末内IDでの閲覧のみ）/ false = Firebase認証済み */
+  /** 常に false。未ログイン状態ではユーザーオブジェクト自体が存在しない。 */
   isAnonymous: boolean;
+}
+
+/**
+ * ログインが必要な操作を未ログインで呼んだときに投げる。
+ * UI 側は事前に isSignedIn() でガードするのが原則だが、
+ * 取りこぼしがあってもこの型で判別してログイン導線を出せるようにしておく。
+ */
+export class AuthRequiredError extends Error {
+  constructor(message = 'この操作にはログインが必要です') {
+    super(message);
+    this.name = 'AuthRequiredError';
+  }
+}
+
+export function isAuthRequiredError(e: unknown): boolean {
+  return e instanceof AuthRequiredError || (e as any)?.name === 'AuthRequiredError';
 }
 
 let _cachedUser: AnonUser | null = null;
@@ -100,8 +129,6 @@ function _notifyCallbacks(user: AnonUser | null) {
 
 // ─── Firebase Auth との橋渡し ────────────────────────────────
 // 循環importを避けるため、auth.ts 側から setAuthedUser() を呼んで反映させる。
-// これにより既存の ensureAnonymousAuth() 利用箇所を書き換えずに
-// UID を Firebase のものへ切り替えられる。
 let _firebaseUser: { uid: string; displayName: string } | null = null;
 
 export function setAuthedUser(user: { uid: string; displayName: string } | null): void {
@@ -117,40 +144,22 @@ export function isSignedIn(): boolean {
   return _firebaseUser !== null;
 }
 
-export async function ensureAnonymousAuth(): Promise<AnonUser> {
-  // Firebase認証済みならそのUIDを最優先で使う
-  if (_firebaseUser) {
-    _cachedUser = {
-      uid: _firebaseUser.uid,
-      displayName: _firebaseUser.displayName,
-      isAnonymous: false,
-    };
-    return _cachedUser;
-  }
-  if (_cachedUser) return _cachedUser;
+/** 現在のUID（未ログインなら null）。読み取り専用の処理から使う。 */
+export function getCurrentUid(): string | null {
+  return _firebaseUser?.uid ?? null;
+}
 
-  const [storedUid, storedName] = await Promise.all([
-    AsyncStorage.getItem(ANON_UID_KEY),
-    AsyncStorage.getItem(DISPLAY_NAME_KEY),
-  ]);
-
-  let uid = storedUid;
-  if (!uid) {
-    uid =
-      Math.random().toString(36).slice(2, 10) +
-      '-' +
-      Date.now().toString(36) +
-      '-' +
-      Math.random().toString(36).slice(2, 6);
-    await AsyncStorage.setItem(ANON_UID_KEY, uid);
-  }
-
+/**
+ * ログイン必須の処理から使う。未ログインなら AuthRequiredError を投げる。
+ * 呼び出し側の UI は先に isSignedIn() で弾いてログイン画面へ誘導すること。
+ */
+export async function requireAuthedUser(): Promise<AnonUser> {
+  if (!_firebaseUser) throw new AuthRequiredError();
   _cachedUser = {
-    uid,
-    displayName: storedName ?? '匿名ライダー',
-    isAnonymous: true,
+    uid: _firebaseUser.uid,
+    displayName: _firebaseUser.displayName,
+    isAnonymous: false,
   };
-  _notifyCallbacks(_cachedUser);
   return _cachedUser;
 }
 
@@ -166,30 +175,28 @@ export async function updateDisplayName(name: string): Promise<void> {
 
 export function onAuthChanged(callback: (user: AnonUser | null) => void) {
   _authCallbacks.push(callback);
-  // 既にユーザーがいれば即座にコールバック
-  if (_cachedUser) {
-    callback(_cachedUser);
-  } else {
-    // バックグラウンドでユーザーを初期化してコールバック
-    ensureAnonymousAuth().catch(() => callback(null));
-  }
+  // 未ログインなら null をそのまま通知する（以前はここで匿名UIDを生成していた）
+  callback(_cachedUser);
   return () => {
     _authCallbacks = _authCallbacks.filter((cb) => cb !== callback);
   };
 }
 
 export async function signOutUser(): Promise<void> {
-  await AsyncStorage.removeItem(ANON_UID_KEY);
+  // ANON_UID_KEY は消さない。旧バージョンの端末内UIDは migration.ts の
+  // 引き継ぎ元であり、消すと再ログイン時に旧データを回収できなくなる。
   _cachedUser = null;
+  _firebaseUser = null;
   _notifyCallbacks(null);
 }
 
-/** Expo プッシュトークンを Firestore に保存 */
+/** Expo プッシュトークンを Firestore に保存（未ログイン時は何もしない） */
 export async function savePushToken(token: string): Promise<void> {
   const db = getDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
-  const profileRef = doc(db, 'userProfiles', user.uid);
+  const uid = getCurrentUid();
+  if (!uid) return; // userProfiles への書き込みはログイン必須
+  const profileRef = doc(db, 'userProfiles', uid);
   await setDoc(profileRef, { expoPushToken: token }, { merge: true });
 }
 
@@ -198,7 +205,7 @@ export async function updateUserPhotoUrl(photoUrl: string): Promise<void> {
   await AsyncStorage.setItem(PHOTO_URL_KEY, photoUrl);
   const db = getDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   const profileRef = doc(db, 'userProfiles', user.uid);
   await setDoc(profileRef, { photoUrl }, { merge: true });
 }
@@ -232,7 +239,7 @@ export const auth = {
 export async function saveRoute(route: Route): Promise<string> {
   const db = getDb();
   if (!db) throw new Error('Firebase が未設定です。');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   const routesRef = collection(db, 'users', user.uid, 'savedRoutes');
   const docRef = await addDoc(routesRef, {
     ...route,
@@ -246,8 +253,9 @@ export async function saveRoute(route: Route): Promise<string> {
 export async function loadSavedRoutes(): Promise<Route[]> {
   const db = getDb();
   if (!db) return [];
-  const user = await ensureAnonymousAuth();
-  const routesRef = collection(db, 'users', user.uid, 'savedRoutes');
+  const uid = getCurrentUid();
+  if (!uid) return []; // 未ログインでは保存ルートを持たない
+  const routesRef = collection(db, 'users', uid, 'savedRoutes');
   const q = query(routesRef, orderBy('createdAt', 'desc'));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((d) => ({
@@ -259,7 +267,7 @@ export async function loadSavedRoutes(): Promise<Route[]> {
 export async function deleteSavedRoute(routeId: string): Promise<void> {
   const db = getDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   const routeRef = doc(db, 'users', user.uid, 'savedRoutes', routeId);
   await deleteDoc(routeRef);
 }
@@ -278,7 +286,7 @@ export async function postCommunityRoute(
 ): Promise<string> {
   const db = getDb();
   if (!db) throw new Error('Firebase が未設定です。');
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
 
   // BAN済みユーザーは投稿不可（App Store UGC要件：問題ユーザーの排除）
   if (await isBannedUser()) {
@@ -344,7 +352,7 @@ async function getHiddenPostIds(): Promise<string[]> {
  */
 export async function reportPost(post: CommunityPost, reason: string): Promise<void> {
   const db = getDb();
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
 
   // 通報者の画面からは即非表示（Apple要件：通報したコンテンツが見え続けない）
   if (post.id) {
@@ -383,8 +391,9 @@ export async function isBannedUser(): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
   try {
-    const user = await ensureAnonymousAuth();
-    const snap = await getDoc(doc(db, 'userProfiles', user.uid));
+    const uid = getCurrentUid();
+    if (!uid) return false;
+    const snap = await getDoc(doc(db, 'userProfiles', uid));
     return snap.exists() && snap.data().banned === true;
   } catch {
     return false;
@@ -481,7 +490,7 @@ export async function getPopularRoutes(
 export async function deleteCommunityPost(postId: string): Promise<void> {
   const db = getDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   const postRef = doc(db, 'communityPosts', postId);
   const snap = await getDoc(postRef);
   if (!snap.exists()) return;
@@ -553,7 +562,7 @@ export interface BikeRecord {
 export async function syncUserBikesToFirestore(bikes: BikeRecord[]): Promise<void> {
   const db = getDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   const profileRef = doc(db, 'userProfiles', user.uid);
   await setDoc(profileRef, { bikes, displayName: user.displayName }, { merge: true });
 }
@@ -645,7 +654,7 @@ export async function getBookmarkedPosts(): Promise<CommunityPost[]> {
 export async function toggleLike(postId: string): Promise<void> {
   const db = getDb();
   if (!db) return;
-  const user = await ensureAnonymousAuth();
+  const user = await requireAuthedUser();
   const postRef = doc(db, 'communityPosts', postId);
   const postSnap = await getDoc(postRef);
   if (!postSnap.exists()) return;
