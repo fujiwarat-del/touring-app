@@ -98,3 +98,7 @@ GoogleService-Info.plist
 # ビルド成果物（リポジトリに入れない）
 *.apk
 *.aab
+
+# Claude Code のローカル設定（端末ごとの承認履歴。秘密情報が混入しうる）
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
