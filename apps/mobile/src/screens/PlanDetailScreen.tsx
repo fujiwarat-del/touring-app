@@ -35,6 +35,7 @@ import {
   type SharedStatus, type SharingMode,
 } from '../services/planSharing';
 import { needsBackgroundHint, BACKGROUND_HINT } from '../services/deviceHints';
+import MiniMapPreview from '../components/MiniMapPreview';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanDetail'>;
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -294,6 +295,13 @@ export default function PlanDetailScreen() {
               {plan.visibility === 'group' && plan.groupName ? `（${plan.groupName}）` : ''}
             </Text>
           </View>
+
+          {/* 集合場所の地図。参加者が当日どこへ行くのかを一目で確認できるように */}
+          {plan.meetingLat != null && plan.meetingLng != null && (
+            <View style={[styles.block, { borderTopColor: colors.borderLight }]}>
+              <MiniMapPreview lat={plan.meetingLat} lng={plan.meetingLng} label={plan.meetingPlace} />
+            </View>
+          )}
 
           {plan.routeSummary ? (
             <View style={[styles.block, { borderTopColor: colors.borderLight }]}>

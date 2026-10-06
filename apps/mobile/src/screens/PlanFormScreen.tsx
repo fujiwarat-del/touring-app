@@ -24,6 +24,7 @@ import { createPlan, updatePlan, getPlan, VISIBILITY_OPTIONS } from '../services
 import type { PlanVisibility } from '../services/plans';
 import { getMyGroups } from '../services/groups';
 import { searchPlace, type GeocodeCandidate } from '../services/geocoding';
+import MiniMapPreview from '../components/MiniMapPreview';
 import type { Group } from '../services/groups';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanForm'>;
@@ -261,30 +262,44 @@ export default function PlanFormScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* 座標が確定したことを明示する。ETA の可否がここで決まるため */}
+            {/* 確定した地点は必ず地図で見せる。
+                同名の別地点を掴んでいても、ラベルだけでは気づけないため */}
             {meetingLat != null && meetingLng != null && (
-              <Text style={[styles.geoOk, { color: colors.primary }]}>
-                ✓ 地点を確定しました（到着予定時刻を計算できます）
-              </Text>
+              <>
+                <Text style={[styles.geoOk, { color: colors.primary }]}>
+                  ✓ この地点でよろしいですか？（到着予定時刻を計算できます）
+                </Text>
+                <MiniMapPreview lat={meetingLat} lng={meetingLng} label={meetingPlace} />
+                <Text style={[styles.geoCoord, { color: colors.textMuted }]}>
+                  緯度経度: {meetingLat.toFixed(5)}, {meetingLng.toFixed(5)}
+                </Text>
+              </>
             )}
 
             {candidates.length > 0 && (
               <View style={[styles.candidateBox, { borderColor: colors.border }]}>
                 <Text style={[styles.candidateHint, { color: colors.textMuted }]}>
-                  {candidates.length}件見つかりました。正しい場所を選んでください
+                  {candidates.length}件見つかりました。地図を見ながら選び直せます
                 </Text>
                 {candidates.map((c, i) => (
                   <TouchableOpacity
                     key={`${c.lat},${c.lng},${i}`}
                     style={[styles.candidateItem, { borderTopColor: colors.borderLight }]}
                     onPress={() => {
+                      // 候補は消さない。地図を見て違っていたら選び直せるようにする
                       setMeetingLat(c.lat);
                       setMeetingLng(c.lng);
                       setMeetingPlace(c.label);
-                      setCandidates([]);
                     }}
                   >
-                    <Text style={[styles.candidateMain, { color: colors.textPrimary }]}>{c.label}</Text>
+                    <Text
+                      style={[
+                        styles.candidateMain,
+                        { color: c.lat === meetingLat && c.lng === meetingLng ? colors.primary : colors.textPrimary },
+                      ]}
+                    >
+                      {c.lat === meetingLat && c.lng === meetingLng ? '✓ ' : ''}{c.label}
+                    </Text>
                     {c.sublabel ? (
                       <Text style={[styles.candidateSub, { color: colors.textMuted }]}>{c.sublabel}</Text>
                     ) : null}
@@ -440,6 +455,7 @@ const styles = StyleSheet.create({
   searchBtn:       { paddingHorizontal: 18, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   searchBtnText:   { color: '#fff', fontWeight: 'bold' },
   geoOk:           { fontSize: 12, marginTop: -4, marginBottom: 8 },
+  geoCoord:        { fontSize: 10, marginTop: -6, marginBottom: 10 },
   geoWarn:         { fontSize: 12, lineHeight: 18, marginTop: -4, marginBottom: 8 },
   candidateBox:    { borderWidth: 1, borderRadius: 8, marginBottom: 12, overflow: 'hidden' },
   candidateHint:   { fontSize: 11, padding: 10 },
