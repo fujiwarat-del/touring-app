@@ -73,6 +73,7 @@ export default function PlanFormScreen() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [routeSummary, setRouteSummary] = useState('');
+  const [routeMapUrl, setRouteMapUrl] = useState('');
   const [spots, setSpots] = useState<PlanSpot[]>([]);
   const [spotBusy, setSpotBusy] = useState<string | null>(null);
   const [capacity, setCapacity] = useState<number | null>(null);
@@ -94,6 +95,7 @@ export default function PlanFormScreen() {
         setMeetingLat(p.meetingLat);
         setMeetingLng(p.meetingLng);
         setRouteSummary(p.routeSummary);
+        setRouteMapUrl(p.routeMapUrl ?? '');
         setSpots(p.spots);
         setCapacity(p.capacity);
         setVisibility(p.visibility);
@@ -218,6 +220,7 @@ export default function PlanFormScreen() {
         meetingLat,
         meetingLng,
         routeSummary: routeSummary.trim(),
+        routeMapUrl: routeMapUrl.trim() || null,
         spots,
         capacity,
         visibility,
@@ -488,6 +491,16 @@ export default function PlanFormScreen() {
               placeholder="例: あしがくぼ → 定峰峠 → 白石峠 → 昼食（あじよし） → 解散"
               placeholderTextColor={colors.textMuted}
               multiline maxLength={300}
+            />
+
+            <Text style={[styles.label, { color: colors.textSecondary }]}>ルートのマップURL（任意）</Text>
+            <TextInput
+              style={[styles.input, { color: colors.textPrimary, borderColor: colors.border }]}
+              value={routeMapUrl} onChangeText={setRouteMapUrl}
+              placeholder="Google Maps のルート共有リンク"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="url"
             />
 
             <Text style={[styles.label, { color: colors.textSecondary }]}>ひとこと（任意）</Text>

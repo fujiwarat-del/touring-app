@@ -82,6 +82,7 @@ export interface TouringPlan {
   meetingLat: number | null;
   meetingLng: number | null;
   routeSummary: string;         // ルート概要（自由テキスト）
+  routeMapUrl: string | null;   // ルート全体のマップリンク（集合場所のURLとは別）
   spots: PlanSpot[];            // 立ち寄り予定のスポット
   capacity: number | null;      // 定員（null = 制限なし）
   visibility: PlanVisibility;
@@ -116,7 +117,7 @@ export type PlanInput = Pick<
   TouringPlan,
   'title' | 'description' | 'dateTime' | 'meetingPlace' | 'meetingMapUrl'
   | 'meetingLat' | 'meetingLng'
-  | 'routeSummary' | 'spots' | 'capacity' | 'visibility' | 'groupId' | 'groupName'
+  | 'routeSummary' | 'routeMapUrl' | 'spots' | 'capacity' | 'visibility' | 'groupId' | 'groupName'
 >;
 
 function tsToIso(v: unknown): string | null {
@@ -142,6 +143,7 @@ function mapPlan(id: string, d: Record<string, any>): TouringPlan {
     meetingLat: typeof d.meetingLat === 'number' ? d.meetingLat : null,
     meetingLng: typeof d.meetingLng === 'number' ? d.meetingLng : null,
     routeSummary: String(d.routeSummary ?? ''),
+    routeMapUrl: d.routeMapUrl ?? null,
     spots: Array.isArray(d.spots)
       ? d.spots.map((x: any, i: number): PlanSpot => ({
           id: String(x?.id ?? `spot-${i}`),

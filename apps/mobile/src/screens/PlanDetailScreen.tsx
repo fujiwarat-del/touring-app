@@ -341,6 +341,14 @@ export default function PlanDetailScreen() {
               <Text style={[styles.blockText, { color: colors.textPrimary }]}>{plan.routeSummary}</Text>
             </View>
           ) : null}
+
+          {plan.routeMapUrl ? (
+            <View style={[styles.block, { borderTopColor: colors.borderLight }]}>
+              <TouchableOpacity onPress={() => Linking.openURL(plan.routeMapUrl!).catch(() => {})}>
+                <Text style={[styles.mapLink, { color: colors.primary }]}>🗺️ ルートを地図アプリで開く ›</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
           {plan.description ? (
             <View style={[styles.block, { borderTopColor: colors.borderLight }]}>
               <Text style={[styles.blockLabel, { color: colors.textMuted }]}>💬 主催者より</Text>
