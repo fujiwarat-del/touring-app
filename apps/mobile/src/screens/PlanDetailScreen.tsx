@@ -34,7 +34,7 @@ import {
   startSharing, stopSharing, getActiveSession, getSharedStatuses,
   type SharedStatus, type SharingMode,
 } from '../services/planSharing';
-import { needsBackgroundHint, BACKGROUND_HINT } from '../services/deviceHints';
+import { needsBackgroundHint, BACKGROUND_HINT, BACKGROUND_HINT_INLINE } from '../services/deviceHints';
 import MiniMapPreview from '../components/MiniMapPreview';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanDetail'>;
@@ -411,6 +411,9 @@ export default function PlanDetailScreen() {
                 <Text style={[styles.shareNote, { color: colors.textMuted }]}>
                   集合場所に着くと自動で停止します。
                 </Text>
+                {needsBackgroundHint() && (
+                  <Text style={styles.hintInline}>{BACKGROUND_HINT_INLINE}</Text>
+                )}
                 <TouchableOpacity
                   style={[styles.locShareBtn, { backgroundColor: colors.textMuted, opacity: busy ? 0.5 : 1 }]}
                   onPress={handleStopSharing}
@@ -428,6 +431,9 @@ export default function PlanDetailScreen() {
                 <Text style={[styles.shareNote, { color: colors.textMuted }]}>
                   出発前にタップしてください。走行中の操作は不要です。
                 </Text>
+                {needsBackgroundHint() && (
+                  <Text style={styles.hintInline}>{BACKGROUND_HINT_INLINE}</Text>
+                )}
                 <TouchableOpacity
                   style={[styles.locShareBtn, { backgroundColor: colors.primary, opacity: busy ? 0.5 : 1 }]}
                   onPress={handleStartSharing}
@@ -567,6 +573,7 @@ export default function PlanDetailScreen() {
 
 const styles = StyleSheet.create({
   shareNote:    { fontSize: 12, lineHeight: 18, marginBottom: 10 },
+  hintInline:   { fontSize: 12, lineHeight: 18, marginBottom: 10, color: '#B45309' },
   shareOn:      { fontSize: 15, fontWeight: 'bold', marginBottom: 6 },
   locShareBtn:     { paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   locShareBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
