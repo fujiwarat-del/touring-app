@@ -300,6 +300,38 @@ export default function PlanDetailScreen() {
           {plan.meetingLat != null && plan.meetingLng != null && (
             <View style={[styles.block, { borderTopColor: colors.borderLight }]}>
               <MiniMapPreview lat={plan.meetingLat} lng={plan.meetingLng} label={plan.meetingPlace} />
+              <TouchableOpacity
+                style={[styles.mapLinkBtn, { borderColor: colors.primary }]}
+                onPress={() => navigation.navigate('PlanMap', { planId })}
+              >
+                <Text style={{ color: colors.primary, fontWeight: 'bold' }}>
+                  🗺️ 全体の地図を見る（立ち寄り・走行中の仲間）
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* 立ち寄りスポット */}
+          {plan.spots.length > 0 && (
+            <View style={[styles.block, { borderTopColor: colors.borderLight }]}>
+              <Text style={[styles.blockLabel, { color: colors.textMuted }]}>📸 立ち寄り予定</Text>
+              {plan.spots.map((sp, i) => (
+                <View key={sp.id} style={styles.spotItem}>
+                  <Text style={[styles.spotItemName, { color: colors.textPrimary }]}>
+                    {i + 1}. {sp.name}
+                  </Text>
+                  {sp.note ? (
+                    <Text style={[styles.spotItemNote, { color: colors.textMuted }]}>{sp.note}</Text>
+                  ) : null}
+                  {sp.photoUrls.length > 0 && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.spotPhotoScroll}>
+                      {sp.photoUrls.map((url) => (
+                        <Image key={url} source={{ uri: url }} style={styles.spotItemPhoto} />
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              ))}
             </View>
           )}
 
@@ -574,6 +606,12 @@ export default function PlanDetailScreen() {
 const styles = StyleSheet.create({
   shareNote:    { fontSize: 12, lineHeight: 18, marginBottom: 10 },
   hintInline:   { fontSize: 12, lineHeight: 18, marginBottom: 10, color: '#B45309' },
+  mapLinkBtn:   { borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  spotItem:     { marginBottom: 14 },
+  spotItemName: { fontSize: 14, fontWeight: '600' },
+  spotItemNote: { fontSize: 12, marginTop: 2 },
+  spotPhotoScroll: { marginTop: 8 },
+  spotItemPhoto:{ width: 120, height: 90, borderRadius: 6, marginRight: 8 },
   shareOn:      { fontSize: 15, fontWeight: 'bold', marginBottom: 6 },
   locShareBtn:     { paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   locShareBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },

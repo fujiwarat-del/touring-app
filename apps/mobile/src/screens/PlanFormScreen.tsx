@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -25,6 +26,9 @@ import type { PlanVisibility } from '../services/plans';
 import { getMyGroups } from '../services/groups';
 import { searchPlace, type GeocodeCandidate } from '../services/geocoding';
 import MiniMapPreview from '../components/MiniMapPreview';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadPhotos } from '../services/cloudinaryService';
+import { MAX_SPOTS, MAX_SPOT_PHOTOS, type PlanSpot } from '../services/plans';
 import type { Group } from '../services/groups';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanForm'>;
@@ -69,6 +73,8 @@ export default function PlanFormScreen() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [routeSummary, setRouteSummary] = useState('');
+  const [spots, setSpots] = useState<PlanSpot[]>([]);
+  const [spotBusy, setSpotBusy] = useState<string | null>(null);
   const [capacity, setCapacity] = useState<number | null>(null);
   const [visibility, setVisibility] = useState<PlanVisibility>('public');
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -88,6 +94,7 @@ export default function PlanFormScreen() {
         setMeetingLat(p.meetingLat);
         setMeetingLng(p.meetingLng);
         setRouteSummary(p.routeSummary);
+        setSpots(p.spots);
         setCapacity(p.capacity);
         setVisibility(p.visibility);
         setGroupId(p.groupId);
@@ -119,6 +126,74 @@ export default function PlanFormScreen() {
     }
   };
 
+  const patchSpot = (id: string, patch: Partial<PlanSpot>) =>
+    setSpots((prev) => prev.map((sp) => (sp.id === id ? { ...sp, ...patch } : sp)));
+
+  const addSpot = () => {
+    if (spots.length >= MAX_SPOTS) {
+      Alert.alert('上限に達しました', `立ち寄りスポットは${MAX_SPOTS}件までです`);
+      return;
+    }
+    setSpots((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${prev.length}`, name: '', lat: null, lng: null, photoUrls: [], note: '' },
+    ]);
+  };
+
+  /** スポット名から座標を引く。集合場所と同じ仕組みを使う */
+  const searchSpot = async (sp: PlanSpot) => {
+    if (!sp.name.trim()) { Alert.alert('入力エラー', 'スポット名を入力してください'); return; }
+    setSpotBusy(sp.id);
+    try {
+      const found = await searchPlace(sp.name);
+      if (found.length === 0) {
+        Alert.alert('見つかりませんでした', '別の言い方でも試せます。座標が無くても保存はできます');
+        return;
+      }
+      const c = found[0];
+      patchSpot(sp.id, { lat: c.lat, lng: c.lng, name: c.label });
+      if (found.length > 1) {
+        Alert.alert('複数見つかりました', `「${c.label}」を採用しました。違う場合は名前を変えて再検索してください`);
+      }
+    } catch {
+      Alert.alert('検索に失敗しました', '通信状態をご確認ください');
+    } finally {
+      setSpotBusy(null);
+    }
+  };
+
+  const pickSpotPhotos = async (sp: PlanSpot) => {
+    const remaining = MAX_SPOT_PHOTOS - sp.photoUrls.length;
+    if (remaining <= 0) {
+      Alert.alert('上限に達しました', `1スポットあたり${MAX_SPOT_PHOTOS}枚までです`);
+      return;
+    }
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
+      Alert.alert('権限が必要です', 'フォトライブラリへのアクセスを許可してください');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.7,
+      selectionLimit: remaining,
+    });
+    if (result.canceled) return;
+
+    setSpotBusy(sp.id);
+    try {
+      // 保存時にまとめて上げるのではなく、選んだ時点で上げる。
+      // 保存ボタンの待ち時間が写真の枚数で膨らむのを避けるため
+      const urls = await uploadPhotos(result.assets.map((a) => a.uri));
+      patchSpot(sp.id, { photoUrls: [...sp.photoUrls, ...urls].slice(0, MAX_SPOT_PHOTOS) });
+    } catch {
+      Alert.alert('アップロードに失敗しました', '通信状態をご確認ください');
+    } finally {
+      setSpotBusy(null);
+    }
+  };
+
   const handleSave = async () => {
     if (!title.trim()) { Alert.alert('入力エラー', 'タイトルを入力してください'); return; }
     if (!meetingPlace.trim()) { Alert.alert('入力エラー', '集合場所を入力してください'); return; }
@@ -143,6 +218,7 @@ export default function PlanFormScreen() {
         meetingLat,
         meetingLng,
         routeSummary: routeSummary.trim(),
+        spots,
         capacity,
         visibility,
         groupId: visibility === 'group' ? groupId : null,
@@ -324,6 +400,87 @@ export default function PlanFormScreen() {
               autoCapitalize="none"
             />
 
+            <Text style={[styles.label, { color: colors.textSecondary }]}>
+              立ち寄りスポット（任意・{spots.length}/{MAX_SPOTS}）
+            </Text>
+            <Text style={[styles.spotHelp, { color: colors.textMuted }]}>
+              写真を添えておくと、参加者が当日の雰囲気を掴めます。
+              場所を検索して地点を確定すると、地図にも表示されます。
+            </Text>
+
+            {spots.map((sp, idx) => (
+              <View key={sp.id} style={[styles.spotCard, { borderColor: colors.border }]}>
+                <View style={styles.spotHeader}>
+                  <Text style={[styles.spotNo, { color: colors.primary }]}>{idx + 1}</Text>
+                  <TextInput
+                    style={[styles.spotName, { color: colors.textPrimary, borderColor: colors.border }]}
+                    value={sp.name}
+                    onChangeText={(t) => patchSpot(sp.id, { name: t, lat: null, lng: null })}
+                    placeholder="例: 白石峠"
+                    placeholderTextColor={colors.textMuted}
+                    maxLength={40}
+                  />
+                  <TouchableOpacity
+                    style={[styles.spotMiniBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => searchSpot(sp)}
+                    disabled={spotBusy === sp.id}
+                  >
+                    <Text style={styles.spotMiniBtnText}>検索</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setSpots((prev) => prev.filter((x) => x.id !== sp.id))}>
+                    <Text style={[styles.spotDelete, { color: colors.textMuted }]}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {sp.lat != null && sp.lng != null && (
+                  <MiniMapPreview lat={sp.lat} lng={sp.lng} label={sp.name} height={130} />
+                )}
+
+                <TextInput
+                  style={[styles.spotNote, { color: colors.textPrimary, borderColor: colors.border }]}
+                  value={sp.note}
+                  onChangeText={(t) => patchSpot(sp.id, { note: t })}
+                  placeholder="メモ（任意）例: ここで昼食、30分休憩"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={100}
+                />
+
+                <View style={styles.spotPhotoRow}>
+                  {sp.photoUrls.map((url) => (
+                    <View key={url}>
+                      <Image source={{ uri: url }} style={styles.spotPhoto} />
+                      <TouchableOpacity
+                        style={styles.spotPhotoDel}
+                        onPress={() => patchSpot(sp.id, { photoUrls: sp.photoUrls.filter((u) => u !== url) })}
+                      >
+                        <Text style={styles.spotPhotoDelText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {sp.photoUrls.length < MAX_SPOT_PHOTOS && (
+                    <TouchableOpacity
+                      style={[styles.spotPhotoAdd, { borderColor: colors.border }]}
+                      onPress={() => pickSpotPhotos(sp)}
+                      disabled={spotBusy === sp.id}
+                    >
+                      {spotBusy === sp.id
+                        ? <ActivityIndicator size="small" color={colors.primary} />
+                        : <Text style={{ color: colors.textMuted, fontSize: 22 }}>＋</Text>}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))}
+
+            {spots.length < MAX_SPOTS && (
+              <TouchableOpacity
+                style={[styles.spotAddBtn, { borderColor: colors.primary }]}
+                onPress={addSpot}
+              >
+                <Text style={{ color: colors.primary, fontWeight: 'bold' }}>＋ スポットを追加</Text>
+              </TouchableOpacity>
+            )}
+
             <Text style={[styles.label, { color: colors.textSecondary }]}>ルート概要（任意）</Text>
             <TextInput
               style={[styles.input, styles.textarea, { color: colors.textPrimary, borderColor: colors.border }]}
@@ -456,6 +613,21 @@ const styles = StyleSheet.create({
   searchBtnText:   { color: '#fff', fontWeight: 'bold' },
   geoOk:           { fontSize: 12, marginTop: -4, marginBottom: 8 },
   geoCoord:        { fontSize: 10, marginTop: -6, marginBottom: 10 },
+  spotHelp:        { fontSize: 11, lineHeight: 17, marginTop: -4, marginBottom: 10 },
+  spotCard:        { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 10 },
+  spotHeader:      { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  spotNo:          { fontSize: 15, fontWeight: 'bold', width: 18 },
+  spotName:        { flex: 1, borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, height: 40 },
+  spotMiniBtn:     { paddingHorizontal: 12, height: 40, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  spotMiniBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  spotDelete:      { fontSize: 18, paddingHorizontal: 4 },
+  spotNote:        { borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, height: 40, marginBottom: 8 },
+  spotPhotoRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  spotPhoto:       { width: 64, height: 64, borderRadius: 6 },
+  spotPhotoDel:    { position: 'absolute', top: -4, right: -4, backgroundColor: 'rgba(0,0,0,0.6)', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  spotPhotoDelText:{ color: '#fff', fontSize: 11 },
+  spotPhotoAdd:    { width: 64, height: 64, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  spotAddBtn:      { borderWidth: 1, borderStyle: 'dashed', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginBottom: 14 },
   geoWarn:         { fontSize: 12, lineHeight: 18, marginTop: -4, marginBottom: 8 },
   candidateBox:    { borderWidth: 1, borderRadius: 8, marginBottom: 12, overflow: 'hidden' },
   candidateHint:   { fontSize: 11, padding: 10 },

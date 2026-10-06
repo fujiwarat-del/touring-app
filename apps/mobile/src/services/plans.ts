@@ -49,6 +49,27 @@ export const VISIBILITY_OPTIONS: Array<{
   { value: 'group',     label: 'グループ限定',  icon: '🔒', desc: '選んだグループのメンバーだけに表示されます' },
 ];
 
+/**
+ * 立ち寄り予定のスポット。
+ * routeSummary（自由テキスト）は残したまま併存させる。既存の計画を壊さず、
+ * 「文章で説明したい」という使い方も引き続き成立させるため。
+ */
+export interface PlanSpot {
+  /** 並び替えや削除のための識別子 */
+  id: string;
+  name: string;
+  /** 座標。ジオコーディングで確定できなかった場合は null */
+  lat: number | null;
+  lng: number | null;
+  /** Cloudinary にアップロード済みのURL */
+  photoUrls: string[];
+  note: string;
+}
+
+/** 1計画あたりのスポット数とスポットあたりの写真枚数の上限 */
+export const MAX_SPOTS = 10;
+export const MAX_SPOT_PHOTOS = 4;
+
 export interface TouringPlan {
   id: string;
   title: string;
@@ -60,7 +81,8 @@ export interface TouringPlan {
   // ジオコーディング導入前に作られた計画や、検索で見つからなかった場合は null。
   meetingLat: number | null;
   meetingLng: number | null;
-  routeSummary: string;         // ルート概要
+  routeSummary: string;         // ルート概要（自由テキスト）
+  spots: PlanSpot[];            // 立ち寄り予定のスポット
   capacity: number | null;      // 定員（null = 制限なし）
   visibility: PlanVisibility;
   groupId: string | null;
@@ -94,7 +116,7 @@ export type PlanInput = Pick<
   TouringPlan,
   'title' | 'description' | 'dateTime' | 'meetingPlace' | 'meetingMapUrl'
   | 'meetingLat' | 'meetingLng'
-  | 'routeSummary' | 'capacity' | 'visibility' | 'groupId' | 'groupName'
+  | 'routeSummary' | 'spots' | 'capacity' | 'visibility' | 'groupId' | 'groupName'
 >;
 
 function tsToIso(v: unknown): string | null {
@@ -120,6 +142,16 @@ function mapPlan(id: string, d: Record<string, any>): TouringPlan {
     meetingLat: typeof d.meetingLat === 'number' ? d.meetingLat : null,
     meetingLng: typeof d.meetingLng === 'number' ? d.meetingLng : null,
     routeSummary: String(d.routeSummary ?? ''),
+    spots: Array.isArray(d.spots)
+      ? d.spots.map((x: any, i: number): PlanSpot => ({
+          id: String(x?.id ?? `spot-${i}`),
+          name: String(x?.name ?? ''),
+          lat: typeof x?.lat === 'number' ? x.lat : null,
+          lng: typeof x?.lng === 'number' ? x.lng : null,
+          photoUrls: Array.isArray(x?.photoUrls) ? x.photoUrls.map(String) : [],
+          note: String(x?.note ?? ''),
+        }))
+      : [],
     capacity: typeof d.capacity === 'number' ? d.capacity : null,
     visibility: (d.visibility ?? 'public') as PlanVisibility,
     groupId: d.groupId ?? null,

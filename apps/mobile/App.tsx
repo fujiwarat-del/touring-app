@@ -52,6 +52,7 @@ import GroupDetailScreen from './src/screens/GroupDetailScreen';
 import PlansScreen from './src/screens/PlansScreen';
 import PlanFormScreen from './src/screens/PlanFormScreen';
 import PlanDetailScreen from './src/screens/PlanDetailScreen';
+import PlanMapScreen from './src/screens/PlanMapScreen';
 import LoginScreen from './src/screens/LoginScreen';
 // 位置共有の背景タスクは、読み込まれた時点で TaskManager に登録される。
 // アプリが終了させられた後に OS がタスクを再開する場合、起動時に定義済みで
@@ -96,6 +97,7 @@ export type RootStackParamList = {
   GroupDetail: { groupId: string };
   PlanForm: { planId?: string };
   PlanDetail: { planId: string };
+  PlanMap: { planId: string };
   Login: { reason?: 'post' | 'follow' | 'group' | 'plan' } | undefined;
   // マイページ配下に移動した画面
   Garage: undefined;
@@ -308,6 +310,7 @@ function AppNavigator() {
           })}
         />
         <Stack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ headerShown: true, title: 'ツーリング計画', ...headerOpts }} />
+        <Stack.Screen name="PlanMap"    component={PlanMapScreen}    options={{ headerShown: true, title: '地図', ...headerOpts }} />
         <Stack.Screen
           name="Login"
           component={LoginScreen}
