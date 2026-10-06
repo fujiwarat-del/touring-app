@@ -48,6 +48,12 @@ service cloud.firestore {
         && planDoc(planId).ownerId == request.auth.uid;
     }
 
+    /** その企画の参加者か。到着予定の共有を読めるのは参加者だけ */
+    function isPlanParticipant(planId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/plans/$(planId)/participants/$(request.auth.uid));
+    }
+
     /** 変更されたフィールドが許可リストの範囲内か */
     function onlyChanges(allowed) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
@@ -197,6 +203,26 @@ service cloud.firestore {
         allow create: if isSelf(applicantUid);
         allow update: if false;
         allow delete: if isSelf(applicantUid) || isPlanOwner(planId);
+      }
+
+      // 到着予定の共有
+      //
+      // 読めるのはその企画の参加者だけ。計画本体は公開でも、
+      // 参加者の居場所は公開してはならない。
+      //
+      // 書けるのは本人だけ。さらに mode が 'eta' のときは座標の混入を拒否する。
+      // 「位置は共有しない」を選んだのに端末が座標を送ってしまう事故を、
+      // クライアントの実装に頼らずルールで止める。
+      // 削除時は request.resource が無いため、create/update とは分けて書く
+      // （まとめて write にすると削除の評価でエラーになり拒否されてしまう）。
+      match /sharing/{sharerUid} {
+        allow read: if isPlanParticipant(planId);
+        allow delete: if isSelf(sharerUid);
+        allow create, update: if isSelf(sharerUid)
+          && (
+            request.resource.data.mode == 'full'
+            || !('lat' in request.resource.data || 'lng' in request.resource.data)
+          );
       }
     }
 

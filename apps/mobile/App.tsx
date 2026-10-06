@@ -53,6 +53,10 @@ import PlansScreen from './src/screens/PlansScreen';
 import PlanFormScreen from './src/screens/PlanFormScreen';
 import PlanDetailScreen from './src/screens/PlanDetailScreen';
 import LoginScreen from './src/screens/LoginScreen';
+// 位置共有の背景タスクは、読み込まれた時点で TaskManager に登録される。
+// アプリが終了させられた後に OS がタスクを再開する場合、起動時に定義済みで
+// ないと更新を受け取れないため、遅延 import にしてはいけない。
+import './src/services/planSharing';
 
 // ─── 型定義 ───────────────────────────────────────────────
 export type RootStackParamList = {

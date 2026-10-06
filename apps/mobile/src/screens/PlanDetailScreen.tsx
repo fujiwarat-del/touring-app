@@ -29,7 +29,12 @@ import {
 } from '../services/plans';
 import type { TouringPlan, Participant, PlanApplication, ParticipationState } from '../services/plans';
 import { formatTouringYears } from '../services/riderProfile';
-import { isSignedIn } from '../services/firebase';
+import { isSignedIn, getCurrentUid } from '../services/firebase';
+import {
+  startSharing, stopSharing, getActiveSession, getSharedStatuses,
+  type SharedStatus, type SharingMode,
+} from '../services/planSharing';
+import { needsBackgroundHint, BACKGROUND_HINT } from '../services/deviceHints';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanDetail'>;
 type NavProp = StackNavigationProp<RootStackParamList>;
@@ -58,6 +63,9 @@ export default function PlanDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [applyModal, setApplyModal] = useState(false);
   const [applyMessage, setApplyMessage] = useState('');
+  // 到着予定の共有
+  const [sharingPlanId, setSharingPlanId] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<SharedStatus[]>([]);
 
   const load = useCallback(async () => {
     const [p, parts, st] = await Promise.all([
@@ -71,6 +79,13 @@ export default function PlanDetailScreen() {
     if (st === 'owner') {
       setApplications(await getApplications(planId).catch(() => []));
     }
+    // 共有状況は参加者でないと読めない（ルールで拒否される）ので、
+    // 失敗しても画面全体は壊さない
+    if (st !== 'none') {
+      setStatuses(await getSharedStatuses(planId).catch(() => []));
+    }
+    const session = await getActiveSession().catch(() => null);
+    setSharingPlanId(session?.planId ?? null);
     setLoading(false);
   }, [planId]);
 
@@ -114,6 +129,50 @@ export default function PlanDetailScreen() {
       Alert.alert('申請しました', '主催者が承認すると参加が確定します。');
     } catch (e: any) {
       Alert.alert('エラー', e?.message ?? '申請に失敗しました');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginSharing = async (mode: SharingMode) => {
+    if (!plan?.meetingLat || !plan?.meetingLng) return;
+    setBusy(true);
+    try {
+      await startSharing({
+        planId,
+        mode,
+        destLat: plan.meetingLat,
+        destLng: plan.meetingLng,
+      });
+      setSharingPlanId(planId);
+      if (needsBackgroundHint()) {
+        Alert.alert(BACKGROUND_HINT.title, BACKGROUND_HINT.body);
+      }
+    } catch (e: any) {
+      Alert.alert('共有を開始できません', e?.message ?? '時間をおいてお試しください');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleStartSharing = () => {
+    Alert.alert(
+      '到着予定を共有しますか？',
+      '集合場所に着くと自動で止まります。走行中の操作は不要です。',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '到着予定だけ', onPress: () => beginSharing('eta') },
+        { text: '現在地も共有', onPress: () => beginSharing('full') },
+      ]
+    );
+  };
+
+  const handleStopSharing = async () => {
+    setBusy(true);
+    try {
+      await stopSharing();
+      setSharingPlanId(null);
+      await load();
     } finally {
       setBusy(false);
     }
@@ -326,6 +385,83 @@ export default function PlanDetailScreen() {
           </View>
         )}
 
+        {/* 到着予定の共有 */}
+        {state !== 'none' && (
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              📍 到着予定の共有
+            </Text>
+
+            {!plan.meetingLat || !plan.meetingLng ? (
+              <Text style={[styles.shareNote, { color: colors.textMuted }]}>
+                この計画は集合場所の地点が未確定のため、到着予定を共有できません。
+                {isOwner ? '計画を編集して集合場所を検索すると使えるようになります。' : '主催者に地点の設定を依頼してください。'}
+              </Text>
+            ) : sharingPlanId === planId ? (
+              <>
+                <Text style={[styles.shareOn, { color: colors.primary }]}>● 共有中</Text>
+                <Text style={[styles.shareNote, { color: colors.textMuted }]}>
+                  集合場所に着くと自動で停止します。
+                </Text>
+                <TouchableOpacity
+                  style={[styles.locShareBtn, { backgroundColor: colors.textMuted, opacity: busy ? 0.5 : 1 }]}
+                  onPress={handleStopSharing}
+                  disabled={busy}
+                >
+                  <Text style={styles.locShareBtnText}>共有を停止</Text>
+                </TouchableOpacity>
+              </>
+            ) : sharingPlanId ? (
+              <Text style={[styles.shareNote, { color: colors.textMuted }]}>
+                別のツーリングで共有中です。先にそちらを停止してください。
+              </Text>
+            ) : (
+              <>
+                <Text style={[styles.shareNote, { color: colors.textMuted }]}>
+                  出発前にタップしてください。走行中の操作は不要です。
+                </Text>
+                <TouchableOpacity
+                  style={[styles.locShareBtn, { backgroundColor: colors.primary, opacity: busy ? 0.5 : 1 }]}
+                  onPress={handleStartSharing}
+                  disabled={busy}
+                >
+                  <Text style={styles.locShareBtnText}>共有して出発</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {statuses.length > 0 && (
+              <View style={styles.statusList}>
+                {statuses.map((st) => {
+                  const p = participants.find((x) => x.uid === st.uid);
+                  const name = st.uid === getCurrentUid() ? 'あなた' : (p?.displayName ?? '参加者');
+                  const ageMin = Math.floor((Date.now() - st.fixAt) / 60000);
+                  // 古いデータを現在地として見せないため、経過時間は必ず出す
+                  const stale = ageMin >= 5;
+                  return (
+                    <View key={st.uid} style={[styles.statusRow, { borderTopColor: colors.borderLight }]}>
+                      <Text style={[styles.statusName, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {name}
+                      </Text>
+                      <Text style={[styles.statusEta, { color: st.arrived ? colors.primary : colors.textPrimary }]}>
+                        {st.arrived
+                          ? '到着済み'
+                          : st.etaMinutes != null
+                            ? `あと${st.etaMinutes}分`
+                            : '—'}
+                      </Text>
+                      <Text style={[styles.statusSub, { color: stale ? '#d9534f' : colors.textMuted }]}>
+                        {st.distanceKm != null && !st.arrived ? `残り${st.distanceKm}km / ` : ''}
+                        {ageMin <= 0 ? 'たった今' : `${ageMin}分前`}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* 参加者一覧 */}
         <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -422,6 +558,15 @@ export default function PlanDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  shareNote:    { fontSize: 12, lineHeight: 18, marginBottom: 10 },
+  shareOn:      { fontSize: 15, fontWeight: 'bold', marginBottom: 6 },
+  locShareBtn:     { paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  locShareBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  statusList:   { marginTop: 14 },
+  statusRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, gap: 8 },
+  statusName:   { flex: 1, fontSize: 13, fontWeight: '600' },
+  statusEta:    { fontSize: 13, fontWeight: 'bold' },
+  statusSub:    { fontSize: 11 },
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: SPACING.lg },

@@ -186,6 +186,41 @@ await it('参加者は participantCount のみ更新できる', async () => {
   await assertFails(updateDoc(doc(bob, 'plans/pl1'), { closed: true }));
 });
 
+// ─── 到着予定の共有 ───────────────────────────────────────
+await it('共有を書けるのは本人のみ', async () => {
+  await assertSucceeds(setDoc(doc(bob, 'plans/pl1/sharing/bob'), {
+    mode: 'eta', etaMinutes: 18, distanceKm: 12, arrived: false, fixAt: 1,
+  }));
+  await assertFails(setDoc(doc(bob, 'plans/pl1/sharing/carol'), {
+    mode: 'eta', etaMinutes: 1, distanceKm: 1, arrived: false, fixAt: 1,
+  }));
+});
+
+await it("mode が 'eta' のとき座標の混入は拒否される", async () => {
+  await assertFails(setDoc(doc(bob, 'plans/pl1/sharing/bob'), {
+    mode: 'eta', etaMinutes: 18, distanceKm: 12, arrived: false, fixAt: 1,
+    lat: 35.6, lng: 139.7,
+  }));
+});
+
+await it("mode が 'full' なら座標を書ける", async () => {
+  await assertSucceeds(setDoc(doc(bob, 'plans/pl1/sharing/bob'), {
+    mode: 'full', etaMinutes: 18, distanceKm: 12, arrived: false, fixAt: 1,
+    lat: 35.6, lng: 139.7,
+  }));
+});
+
+await it('共有を読めるのは参加者だけ', async () => {
+  // bob は pl1 の参加者（上のテストで登録済み）、carol は参加していない
+  await assertSucceeds(getDoc(doc(bob, 'plans/pl1/sharing/bob')));
+  await assertFails(getDoc(doc(anon, 'plans/pl1/sharing/bob')));
+  const carol = testEnv.authenticatedContext('carol-outsider').firestore();
+  await assertFails(getDoc(doc(carol, 'plans/pl1/sharing/bob')));
+});
+
+await it('自分の共有は削除できる', () =>
+  assertSucceeds(deleteDoc(doc(bob, 'plans/pl1/sharing/bob'))));
+
 // ─── 通報 ─────────────────────────────────────────────────
 await it('通報は本人名義でのみ作成でき、読み出しはできない', async () => {
   await assertSucceeds(addDoc(collection(alice, 'reports'), {

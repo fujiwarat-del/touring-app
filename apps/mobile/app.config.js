@@ -50,7 +50,21 @@ module.exports = {
       favicon: './assets/favicon.png',
     },
     plugins: [
-      'expo-location',
+      // 位置共有は前面サービス方式で行う。
+      // isAndroidForegroundServiceEnabled のみ有効にし、
+      // isAndroidBackgroundLocationEnabled は付けない。これにより
+      // FOREGROUND_SERVICE / FOREGROUND_SERVICE_LOCATION だけが宣言され、
+      // ACCESS_BACKGROUND_LOCATION は入らない。
+      // = Play ストアの背景位置に関する個別審査（デモ動画提出）が不要になる。
+      // 実機検証でこの方式で成立することを確認済み。
+      [
+        'expo-location',
+        {
+          isAndroidForegroundServiceEnabled: true,
+          locationWhenInUsePermission:
+            'ツーリング企画の参加者に、集合場所への到着予定を共有するために位置情報を使用します。',
+        },
+      ],
       'expo-image-picker',
       'expo-apple-authentication',
       '@react-native-google-signin/google-signin',
