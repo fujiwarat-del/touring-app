@@ -56,6 +56,10 @@ export interface TouringPlan {
   dateTime: string;             // 開催日時（ISO）
   meetingPlace: string;         // 集合場所
   meetingMapUrl: string | null; // 集合場所のマップリンク
+  // 集合場所の座標。到着予定時刻の計算に使う。
+  // ジオコーディング導入前に作られた計画や、検索で見つからなかった場合は null。
+  meetingLat: number | null;
+  meetingLng: number | null;
   routeSummary: string;         // ルート概要
   capacity: number | null;      // 定員（null = 制限なし）
   visibility: PlanVisibility;
@@ -89,6 +93,7 @@ export interface PlanApplication {
 export type PlanInput = Pick<
   TouringPlan,
   'title' | 'description' | 'dateTime' | 'meetingPlace' | 'meetingMapUrl'
+  | 'meetingLat' | 'meetingLng'
   | 'routeSummary' | 'capacity' | 'visibility' | 'groupId' | 'groupName'
 >;
 
@@ -112,6 +117,8 @@ function mapPlan(id: string, d: Record<string, any>): TouringPlan {
     dateTime: tsToIso(d.dateTime) ?? new Date().toISOString(),
     meetingPlace: String(d.meetingPlace ?? ''),
     meetingMapUrl: d.meetingMapUrl ?? null,
+    meetingLat: typeof d.meetingLat === 'number' ? d.meetingLat : null,
+    meetingLng: typeof d.meetingLng === 'number' ? d.meetingLng : null,
     routeSummary: String(d.routeSummary ?? ''),
     capacity: typeof d.capacity === 'number' ? d.capacity : null,
     visibility: (d.visibility ?? 'public') as PlanVisibility,

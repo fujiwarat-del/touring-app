@@ -23,6 +23,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { createPlan, updatePlan, getPlan, VISIBILITY_OPTIONS } from '../services/plans';
 import type { PlanVisibility } from '../services/plans';
 import { getMyGroups } from '../services/groups';
+import { searchPlace, type GeocodeCandidate } from '../services/geocoding';
 import type { Group } from '../services/groups';
 
 type RouteProps = RouteProp<RootStackParamList, 'PlanForm'>;
@@ -60,6 +61,12 @@ export default function PlanFormScreen() {
   const [picker, setPicker] = useState<'date' | 'time' | null>(null);
   const [meetingPlace, setMeetingPlace] = useState('');
   const [meetingMapUrl, setMeetingMapUrl] = useState('');
+  // 集合場所の座標。到着予定時刻の計算に使う
+  const [meetingLat, setMeetingLat] = useState<number | null>(null);
+  const [meetingLng, setMeetingLng] = useState<number | null>(null);
+  const [candidates, setCandidates] = useState<GeocodeCandidate[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [routeSummary, setRouteSummary] = useState('');
   const [capacity, setCapacity] = useState<number | null>(null);
   const [visibility, setVisibility] = useState<PlanVisibility>('public');
@@ -77,6 +84,8 @@ export default function PlanFormScreen() {
         setDateTime(p.dateTime);
         setMeetingPlace(p.meetingPlace);
         setMeetingMapUrl(p.meetingMapUrl ?? '');
+        setMeetingLat(p.meetingLat);
+        setMeetingLng(p.meetingLng);
         setRouteSummary(p.routeSummary);
         setCapacity(p.capacity);
         setVisibility(p.visibility);
@@ -85,6 +94,29 @@ export default function PlanFormScreen() {
       .catch(() => Alert.alert('エラー', '計画の読み込みに失敗しました'))
       .finally(() => setLoading(false));
   }, [planId]);
+
+  const handleSearchPlace = async () => {
+    const q = meetingPlace.trim();
+    if (!q) { Alert.alert('入力エラー', '集合場所を入力してください'); return; }
+    setSearching(true);
+    setCandidates([]);
+    try {
+      const found = await searchPlace(q);
+      setSearched(true);
+      if (found.length === 1) {
+        // 候補が1つなら選ばせる意味がないので確定してしまう
+        setMeetingLat(found[0].lat);
+        setMeetingLng(found[0].lng);
+        setMeetingPlace(found[0].label);
+      } else {
+        setCandidates(found);
+      }
+    } catch {
+      Alert.alert('検索に失敗しました', '通信状態をご確認ください');
+    } finally {
+      setSearching(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!title.trim()) { Alert.alert('入力エラー', 'タイトルを入力してください'); return; }
@@ -107,6 +139,8 @@ export default function PlanFormScreen() {
         dateTime,
         meetingPlace: meetingPlace.trim(),
         meetingMapUrl: meetingMapUrl.trim() || null,
+        meetingLat,
+        meetingLng,
         routeSummary: routeSummary.trim(),
         capacity,
         visibility,
@@ -194,12 +228,77 @@ export default function PlanFormScreen() {
             <Text style={[styles.label, { color: colors.textSecondary }]}>
               集合場所 <Text style={styles.required}>必須</Text>
             </Text>
-            <TextInput
-              style={[styles.input, { color: colors.textPrimary, borderColor: colors.border }]}
-              value={meetingPlace} onChangeText={setMeetingPlace}
-              placeholder="例: 道の駅果樹公園あしがくぼ"
-              placeholderTextColor={colors.textMuted} maxLength={80}
-            />
+            <View style={styles.searchRow}>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.searchInput,
+                  { color: colors.textPrimary, borderColor: colors.border },
+                ]}
+                value={meetingPlace}
+                onChangeText={(t) => {
+                  setMeetingPlace(t);
+                  // 文字を変えたら確定済みの座標は無効にする
+                  setMeetingLat(null);
+                  setMeetingLng(null);
+                  setCandidates([]);
+                  setSearched(false);
+                }}
+                placeholder="例: 道の駅果樹公園あしがくぼ"
+                placeholderTextColor={colors.textMuted}
+                maxLength={80}
+                onSubmitEditing={handleSearchPlace}
+                returnKeyType="search"
+              />
+              <TouchableOpacity
+                style={[styles.searchBtn, { backgroundColor: colors.primary, opacity: searching ? 0.5 : 1 }]}
+                onPress={handleSearchPlace}
+                disabled={searching}
+              >
+                {searching
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.searchBtnText}>検索</Text>}
+              </TouchableOpacity>
+            </View>
+
+            {/* 座標が確定したことを明示する。ETA の可否がここで決まるため */}
+            {meetingLat != null && meetingLng != null && (
+              <Text style={[styles.geoOk, { color: colors.primary }]}>
+                ✓ 地点を確定しました（到着予定時刻を計算できます）
+              </Text>
+            )}
+
+            {candidates.length > 0 && (
+              <View style={[styles.candidateBox, { borderColor: colors.border }]}>
+                <Text style={[styles.candidateHint, { color: colors.textMuted }]}>
+                  {candidates.length}件見つかりました。正しい場所を選んでください
+                </Text>
+                {candidates.map((c, i) => (
+                  <TouchableOpacity
+                    key={`${c.lat},${c.lng},${i}`}
+                    style={[styles.candidateItem, { borderTopColor: colors.borderLight }]}
+                    onPress={() => {
+                      setMeetingLat(c.lat);
+                      setMeetingLng(c.lng);
+                      setMeetingPlace(c.label);
+                      setCandidates([]);
+                    }}
+                  >
+                    <Text style={[styles.candidateMain, { color: colors.textPrimary }]}>{c.label}</Text>
+                    {c.sublabel ? (
+                      <Text style={[styles.candidateSub, { color: colors.textMuted }]}>{c.sublabel}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {searched && candidates.length === 0 && meetingLat == null && (
+              <Text style={[styles.geoWarn, { color: colors.textMuted }]}>
+                地点を特定できませんでした。このまま保存できますが、
+                到着予定時刻の共有は使えません。別の言い方（最寄りの住所や駅名など）でも試せます。
+              </Text>
+            )}
 
             <Text style={[styles.label, { color: colors.textSecondary }]}>集合場所のマップURL（任意）</Text>
             <TextInput
@@ -336,6 +435,17 @@ export default function PlanFormScreen() {
 }
 
 const styles = StyleSheet.create({
+  searchRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  searchInput:     { flex: 1 },
+  searchBtn:       { paddingHorizontal: 18, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  searchBtnText:   { color: '#fff', fontWeight: 'bold' },
+  geoOk:           { fontSize: 12, marginTop: -4, marginBottom: 8 },
+  geoWarn:         { fontSize: 12, lineHeight: 18, marginTop: -4, marginBottom: 8 },
+  candidateBox:    { borderWidth: 1, borderRadius: 8, marginBottom: 12, overflow: 'hidden' },
+  candidateHint:   { fontSize: 11, padding: 10 },
+  candidateItem:   { paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
+  candidateMain:   { fontSize: 14, fontWeight: '600' },
+  candidateSub:    { fontSize: 11, marginTop: 2 },
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: SPACING.lg },
