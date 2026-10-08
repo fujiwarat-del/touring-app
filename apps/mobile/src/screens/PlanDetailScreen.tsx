@@ -95,6 +95,24 @@ export default function PlanDetailScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // 「今どこにいるか」を見る機能なので、画面を開いている間は定期的に取り直す。
+  // 更新するのは共有状況だけで、計画や参加者は取り直さない（読み取り回数を抑えるため）。
+  // 誰も共有していないときは何も起きないので無駄打ちにならない。
+  // 本来は onSnapshot での購読が筋だが、参加者数に応じて読み取りが増えるため
+  // まずは定期取得で様子を見る。
+  useFocusEffect(
+    useCallback(() => {
+      if (state === 'none') return;
+      const timer = setInterval(() => {
+        getSharedStatuses(planId)
+          .then(setStatuses)
+          .catch(() => {});
+        readSharingDebug().then(setDebug).catch(() => {});
+      }, 30_000);
+      return () => clearInterval(timer);
+    }, [planId, state])
+  );
+
   const isOwner = state === 'owner';
   const isFull = !!plan && plan.capacity != null && plan.participantCount >= plan.capacity;
 
