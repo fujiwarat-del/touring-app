@@ -31,8 +31,8 @@ import type { TouringPlan, Participant, PlanApplication, ParticipationState } fr
 import { formatTouringYears } from '../services/riderProfile';
 import { isSignedIn, getCurrentUid } from '../services/firebase';
 import {
-  startSharing, stopSharing, getActiveSession, getSharedStatuses,
-  type SharedStatus, type SharingMode,
+  startSharing, stopSharing, getActiveSession, getSharedStatuses, readSharingDebug,
+  type SharedStatus, type SharingMode, type SharingDebugEntry,
 } from '../services/planSharing';
 import { needsBackgroundHint, BACKGROUND_HINT, BACKGROUND_HINT_INLINE } from '../services/deviceHints';
 import MiniMapPreview from '../components/MiniMapPreview';
@@ -67,6 +67,8 @@ export default function PlanDetailScreen() {
   // 到着予定の共有
   const [sharingPlanId, setSharingPlanId] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<SharedStatus[]>([]);
+  const [debug, setDebug] = useState<SharingDebugEntry[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
 
   const load = useCallback(async () => {
     const [p, parts, st] = await Promise.all([
@@ -87,6 +89,7 @@ export default function PlanDetailScreen() {
     }
     const session = await getActiveSession().catch(() => null);
     setSharingPlanId(session?.planId ?? null);
+    setDebug(await readSharingDebug().catch(() => []));
     setLoading(false);
   }, [planId]);
 
@@ -484,6 +487,21 @@ export default function PlanDetailScreen() {
               </>
             )}
 
+            {/* 背景処理は画面に何も出ないため、動作記録を見られるようにしておく。
+                不具合の切り分けを推測でやらないため */}
+            {debug.length > 0 && (
+              <TouchableOpacity onPress={() => setShowDebug((v) => !v)}>
+                <Text style={[styles.debugToggle, { color: colors.textMuted }]}>
+                  {showDebug ? '▼' : '▶'} 動作記録（{debug.length}件）
+                </Text>
+              </TouchableOpacity>
+            )}
+            {showDebug && debug.slice().reverse().map((d, i) => (
+              <Text key={`${d.at}-${i}`} style={[styles.debugLine, { color: colors.textMuted }]}>
+                {new Date(d.at).toLocaleTimeString('ja-JP')}  {d.event}
+              </Text>
+            ))}
+
             {statuses.length > 0 && (
               <View style={styles.statusList}>
                 {statuses.map((st) => {
@@ -615,6 +633,8 @@ const styles = StyleSheet.create({
   shareNote:    { fontSize: 12, lineHeight: 18, marginBottom: 10 },
   hintInline:   { fontSize: 12, lineHeight: 18, marginBottom: 10, color: '#B45309' },
   mapLinkBtn:   { borderWidth: 1, borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  debugToggle:  { fontSize: 11, marginTop: 10 },
+  debugLine:    { fontSize: 10, lineHeight: 15 },
   spotItem:     { marginBottom: 14 },
   spotItemName: { fontSize: 14, fontWeight: '600' },
   spotItemNote: { fontSize: 12, marginTop: 2 },

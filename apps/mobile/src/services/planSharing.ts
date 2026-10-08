@@ -30,6 +30,37 @@ export const SHARING_TASK = 'plan-location-sharing';
 const SESSION_KEY = '@plan_sharing_session';
 const SPEEDS_KEY = '@plan_sharing_speeds';
 const LAST_WRITE_KEY = '@plan_sharing_last_write';
+const DEBUG_KEY = '@plan_sharing_debug';
+
+/**
+ * 背景タスクの動作記録。
+ * 以前、認証の初期化失敗を catch {} で握り潰していたために原因を追えず、
+ * ビルドを何度も往復した。背景処理は画面に何も出ないので、
+ * 何が起きたかを残しておかないと推測で追うことになる。
+ */
+const DEBUG_MAX = 30;
+
+export interface SharingDebugEntry {
+  at: number;
+  event: string;
+}
+
+export async function readSharingDebug(): Promise<SharingDebugEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(DEBUG_KEY);
+    return raw ? (JSON.parse(raw) as SharingDebugEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function logDebug(event: string): Promise<void> {
+  try {
+    const cur = await readSharingDebug();
+    const next = [...cur, { at: Date.now(), event }].slice(-DEBUG_MAX);
+    await AsyncStorage.setItem(DEBUG_KEY, JSON.stringify(next));
+  } catch { /* 記録に失敗しても本処理は続ける */ }
+}
 
 /** Firestore への書き込み間隔。測位のたびに書くと人数の二乗で読み取りが増える */
 const WRITE_INTERVAL_MS = 150_000; // 2分30秒
@@ -109,7 +140,10 @@ TaskManager.defineTask(SHARING_TASK, async ({ data, error }) => {
   if (!latest) return;
 
   const session = await loadSession();
-  if (!session) return;
+  if (!session) {
+    await logDebug('測位を受けたがセッションが無い');
+    return;
+  }
 
   // 期限切れなら自分で止める（消し忘れたまま電池を食い続けるのを防ぐ）
   if (Date.now() > new Date(session.expiresAt).getTime()) {
@@ -141,8 +175,9 @@ TaskManager.defineTask(SHARING_TASK, async ({ data, error }) => {
   await AsyncStorage.setItem(LAST_WRITE_KEY, String(Date.now())).catch(() => {});
 
   if (arrived) {
-    // 到着したら共有を終える。待つ側には到着が伝わった状態で残る
-    await stopSharing().catch(() => {});
+    // 到着したら測位を止めるが、共有ドキュメントは残す。
+    // 消してしまうと待つ側が「到着済み」を見られない。
+    await stopSharing({ keepStatus: true }).catch(() => {});
   }
 });
 
@@ -154,9 +189,9 @@ async function writeStatus(
   arrived: boolean
 ): Promise<void> {
   const db = getFirestoreDb();
-  if (!db) return;
+  if (!db) { await logDebug('Firestore 未初期化'); return; }
   const uid = await waitForUid();
-  if (!uid) return;
+  if (!uid) { await logDebug('認証の復元に失敗（背景で UID を取得できず）'); return; }
 
   const { distanceKm, etaMinutes } = estimateEta(here, {
     lat: session.destLat, lng: session.destLng,
@@ -177,7 +212,12 @@ async function writeStatus(
     payload.lng = here.lng;
   }
 
-  await setDoc(doc(db, 'plans', session.planId, 'sharing', uid), payload).catch(() => {});
+  try {
+    await setDoc(doc(db, 'plans', session.planId, 'sharing', uid), payload);
+    await logDebug(`書き込み成功 ETA${payload.etaMinutes}分 ${arrived ? '(到着)' : ''}`);
+  } catch (e: any) {
+    await logDebug(`書き込み失敗: ${e?.code ?? e?.message ?? 'unknown'}`);
+  }
 }
 
 // ─── 開始・停止 ──────────────────────────────────────────
@@ -231,11 +271,16 @@ export async function startSharing(params: {
   });
   await AsyncStorage.multiRemove([SPEEDS_KEY, LAST_WRITE_KEY]).catch(() => {});
 
+  await logDebug(`共有を開始（${params.mode}）`);
   await Location.startLocationUpdatesAsync(SHARING_TASK, {
     accuracy: Location.Accuracy.Balanced,
-    // 走行中を想定し距離でも間引く。停車中に無駄な測位を繰り返さないため
+    // 距離フィルタは入れない。
+    // distanceInterval を指定すると、その距離を動くまで位置が配信されず、
+    // (1) 停車中は一切更新されない (2) 集合場所に着いて停まると到着を検出できない
+    // という二重の問題が起きる。到着判定は「動かなくなった状態」で行う必要がある。
+    // 電池と通信量は、測位ではなく Firestore への書き込み間隔で抑える。
     timeInterval: 60_000,
-    distanceInterval: 300,
+    distanceInterval: 0,
     pausesUpdatesAutomatically: false,
     showsBackgroundLocationIndicator: true,
     foregroundService: {
@@ -246,13 +291,14 @@ export async function startSharing(params: {
   });
 }
 
-export async function stopSharing(): Promise<void> {
+export async function stopSharing(opts: { keepStatus?: boolean } = {}): Promise<void> {
   const session = await loadSession();
   if (await isSharing()) {
     await Location.stopLocationUpdatesAsync(SHARING_TASK).catch(() => {});
   }
-  // 自分の共有ドキュメントは消す。待つ側に古い情報を残さないため
-  if (session) {
+  // 自分で止めたときは消す。待つ側に古い情報を残さないため。
+  // 到着による停止だけは残す（keepStatus）。
+  if (session && !opts.keepStatus) {
     const db = getFirestoreDb();
     const uid = await waitForUid();
     if (db && uid) {
